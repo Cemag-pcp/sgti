@@ -43,10 +43,14 @@ export const users: User[] = [
 ]
 
 export const slaConfigs: SLAConfig[] = [
-  { prioridade: "Crítica", horas: 4 },
-  { prioridade: "Alta", horas: 24 },
-  { prioridade: "Média", horas: 48 },
-  { prioridade: "Baixa", horas: 120 },
+  { area: "Dev", prioridade: "Crítica", horas: 4 },
+  { area: "Dev", prioridade: "Alta", horas: 24 },
+  { area: "Dev", prioridade: "Média", horas: 48 },
+  { area: "Dev", prioridade: "Baixa", horas: 120 },
+  { area: "Infra", prioridade: "Crítica", horas: 4 },
+  { area: "Infra", prioridade: "Alta", horas: 24 },
+  { area: "Infra", prioridade: "Média", horas: 48 },
+  { area: "Infra", prioridade: "Baixa", horas: 120 },
 ]
 
 export const tickets: Ticket[] = [

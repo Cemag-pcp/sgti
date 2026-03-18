@@ -139,8 +139,12 @@ export default function ConfiguracoesPage() {
     setSavingSla(true)
     setSlaError(null)
     try {
-      const updated = await updateSlaConfig(token, editingSla.prioridade, Math.round(parsedHours))
-      setSlaList((prev) => prev.map((s) => (s.prioridade === updated.prioridade ? { ...s, horas: updated.horas } : s)))
+      const updated = await updateSlaConfig(token, editingSla.area, editingSla.prioridade, Math.round(parsedHours))
+      setSlaList((prev) =>
+        prev.map((s) =>
+          s.area === updated.area && s.prioridade === updated.prioridade ? { ...s, horas: updated.horas } : s
+        )
+      )
       setEditingSla(null)
       setHoursInput("")
     } catch (err) {
@@ -233,6 +237,13 @@ export default function ConfiguracoesPage() {
     () => [...notificationRecipients].sort((a, b) => a.email.localeCompare(b.email)),
     [notificationRecipients]
   )
+  const slaByArea = useMemo(
+    () => ({
+      Dev: slaList.filter((sla) => sla.area === "Dev"),
+      Infra: slaList.filter((sla) => sla.area === "Infra"),
+    }),
+    [slaList]
+  )
 
   if (currentUser.role === "tecnico") {
     return (
@@ -315,40 +326,49 @@ export default function ConfiguracoesPage() {
         <TabsContent value="sla" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">SLA por prioridade</CardTitle>
-              <CardDescription>Tempo máximo para resoluções conforme prioridade</CardDescription>
+              <CardTitle className="text-base">SLA por área</CardTitle>
+              <CardDescription>Tempo máximo para resoluções por prioridade em Desenvolvimento e Infra</CardDescription>
             </CardHeader>
             <CardContent>
               {slaError ? <p className="mb-3 text-sm text-destructive">{slaError}</p> : null}
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Prioridade</TableHead>
-                    <TableHead>Prazo (horas)</TableHead>
-                    <TableHead>Prazo (dias)</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {slaLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-muted-foreground">Carregando SLAs...</TableCell>
-                    </TableRow>
-                  ) : null}
-                  {slaList.map((sla) => (
-                    <TableRow key={sla.prioridade}>
-                      <TableCell className="font-medium text-foreground">{sla.prioridade}</TableCell>
-                      <TableCell className="text-foreground">{sla.horas}h</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {sla.horas < 24 ? `${sla.horas}h` : `${Math.round(sla.horas / 24)} dia(s)`}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="sm" onClick={() => openEditSla(sla)}>Editar</Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="grid gap-6 lg:grid-cols-2">
+                {(["Dev", "Infra"] as const).map((area) => (
+                  <div key={area} className="space-y-3">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {area === "Dev" ? "Desenvolvimento" : "Infra"}
+                    </h3>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Prioridade</TableHead>
+                          <TableHead>Prazo (horas)</TableHead>
+                          <TableHead>Prazo (dias)</TableHead>
+                          <TableHead className="text-right">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {slaLoading ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-muted-foreground">Carregando SLAs...</TableCell>
+                          </TableRow>
+                        ) : null}
+                        {slaByArea[area].map((sla) => (
+                          <TableRow key={`${sla.area}-${sla.prioridade}`}>
+                            <TableCell className="font-medium text-foreground">{sla.prioridade}</TableCell>
+                            <TableCell className="text-foreground">{sla.horas}h</TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {sla.horas < 24 ? `${sla.horas}h` : `${Math.round(sla.horas / 24)} dia(s)`}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="outline" size="sm" onClick={() => openEditSla(sla)}>Editar</Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -360,7 +380,9 @@ export default function ConfiguracoesPage() {
           <DialogHeader>
             <DialogTitle>Editar SLA</DialogTitle>
             <DialogDescription>
-              {editingSla ? `Atualize o prazo da prioridade ${editingSla.prioridade}.` : "Atualize o prazo por prioridade."}
+              {editingSla
+                ? `Atualize o prazo da prioridade ${editingSla.prioridade} para ${editingSla.area === "Dev" ? "Desenvolvimento" : "Infra"}.`
+                : "Atualize o prazo por prioridade."}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">

@@ -5,6 +5,7 @@ import Link from "next/link"
 import {
   fetchWhatsappChatMessagesApi,
   fetchWhatsappChatSessionsApi,
+  getApiBaseUrl,
   getAuthToken,
   sendWhatsappChatMessageApi,
   type WhatsappChatMessageRecord,
@@ -111,6 +112,8 @@ export default function WhatsappChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const prevLengthRef = useRef(0)
+  const sessionsEventSourceRef = useRef<EventSource | null>(null)
+  const messagesEventSourceRef = useRef<EventSource | null>(null)
 
   const canAccessChat = currentUser.role === "tecnico" || currentUser.role === "gestor"
 
@@ -183,21 +186,85 @@ export default function WhatsappChatPage() {
     }
   }, [])
 
+  const connectSessionsStream = useCallback(() => {
+    const token = getAuthToken()
+    if (!token) return
+    sessionsEventSourceRef.current?.close()
+    const stream = new EventSource(
+      `${getApiBaseUrl()}/api/whatsapp/chats/stream/?token=${encodeURIComponent(token)}`
+    )
+    stream.addEventListener("sessions", (event) => {
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as WhatsappChatSessionRecord[]
+        data.sort((a, b) => {
+          if (!a.lastAt && !b.lastAt) return 0
+          if (!a.lastAt) return 1
+          if (!b.lastAt) return -1
+          return new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime()
+        })
+        setSessions(data)
+        setSessionsLoading(false)
+        setSelectedNumero((prev) => {
+          if (!prev) {
+            const first = data.find((s) => !s.numero.includes("@newsletter"))
+            return first?.numero ?? ""
+          }
+          return data.some((s) => s.numero === prev) ? prev : (data[0]?.numero ?? "")
+        })
+      } catch {
+        /* ignore malformed event */
+      }
+    })
+    stream.onerror = () => {
+      stream.close()
+      window.setTimeout(() => {
+        if (sessionsEventSourceRef.current === stream) {
+          connectSessionsStream()
+        }
+      }, 3000)
+    }
+    sessionsEventSourceRef.current = stream
+  }, [])
+
+  const connectMessagesStream = useCallback((numero: string) => {
+    const token = getAuthToken()
+    if (!token) return
+    messagesEventSourceRef.current?.close()
+    const stream = new EventSource(
+      `${getApiBaseUrl()}/api/whatsapp/chats/${encodeURIComponent(numero)}/messages/stream/?token=${encodeURIComponent(token)}`
+    )
+    stream.addEventListener("messages", (event) => {
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as WhatsappChatMessageRecord[]
+        setMessages(data)
+      } catch {
+        /* ignore malformed event */
+      }
+    })
+    stream.onerror = () => {
+      stream.close()
+      window.setTimeout(() => {
+        if (messagesEventSourceRef.current === stream && selectedNumero === numero) {
+          connectMessagesStream(numero)
+        }
+      }, 3000)
+    }
+    messagesEventSourceRef.current = stream
+  }, [selectedNumero])
+
   useEffect(() => {
     if (!canAccessChat) return
     void loadSessions()
-    const t = window.setInterval(() => void loadSessions(), 10_000)
-    return () => window.clearInterval(t)
-  }, [canAccessChat, loadSessions])
+    connectSessionsStream()
+    return () => sessionsEventSourceRef.current?.close()
+  }, [canAccessChat, loadSessions, connectSessionsStream])
 
   useEffect(() => {
     if (!selectedNumero || !canAccessChat) return
     void loadMessages(selectedNumero)
-    const timer = window.setInterval(() => {
-      void loadMessages(selectedNumero)
-    }, 3000)
-    return () => window.clearInterval(timer)
-  }, [selectedNumero, canAccessChat, loadMessages])
+    connectMessagesStream(selectedNumero)
+    return () => messagesEventSourceRef.current?.close()
+  }, [selectedNumero, canAccessChat, loadMessages, connectMessagesStream])
 
   async function handleSend() {
     if (!selectedNumero || !mensagem.trim()) return

@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from .models import (
     Ativo,
+    AtivoMaintenance,
     CategoryConfig,
     Comment,
     ExternalPlatform,
@@ -152,7 +153,7 @@ class CommentSerializer(serializers.ModelSerializer):
 class SLAConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model = SLAConfig
-        fields = ("prioridade", "horas")
+        fields = ("area", "prioridade", "horas")
 
 
 class TicketCreateSerializer(serializers.Serializer):
@@ -636,16 +637,22 @@ class AtivoSerializer(serializers.ModelSerializer):
     numeroSerie = serializers.CharField(source="numero_serie")
     numeroTombamento = serializers.CharField(source="numero_tombamento")
     entreguePor = serializers.CharField(source="entregue_por")
+    linkTermo = serializers.CharField(source="link_termo")
     dataEntrega = serializers.DateField(source="data_entrega", allow_null=True)
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    manutencoes = serializers.SerializerMethodField()
 
     class Meta:
         model = Ativo
         fields = (
             "id", "descricao", "tipoAparelho", "numeroSerie", "numeroTombamento",
-            "responsavel", "dataEntrega", "entreguePor", "localizacao",
-            "status", "custo", "observacoes", "createdAt",
+            "responsavel", "dataEntrega", "entreguePor", "linkTermo", "localizacao",
+            "status", "custo", "observacoes", "manutencoes", "createdAt",
         )
+
+    def get_manutencoes(self, obj):
+        records = obj.manutencoes.all().order_by("-data_manutencao", "-id")
+        return AtivoMaintenanceSerializer(records, many=True).data
 
 
 class AtivoCreateSerializer(serializers.Serializer):
@@ -656,6 +663,7 @@ class AtivoCreateSerializer(serializers.Serializer):
     responsavel = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
     dataEntrega = serializers.DateField(required=False, allow_null=True)
     entreguePor = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
+    linkTermo = serializers.URLField(max_length=500, required=False, allow_blank=True, default="")
     localizacao = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
     status = serializers.ChoiceField(choices=["ativo", "disponivel", "manutencao", "descartado"], default="disponivel")
     custo = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, allow_null=True)
@@ -676,7 +684,29 @@ class AtivoUpdateSerializer(serializers.Serializer):
     responsavel = serializers.CharField(max_length=150, required=False, allow_blank=True)
     dataEntrega = serializers.DateField(required=False, allow_null=True)
     entreguePor = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    linkTermo = serializers.URLField(max_length=500, required=False, allow_blank=True)
     localizacao = serializers.CharField(max_length=150, required=False, allow_blank=True)
     status = serializers.ChoiceField(choices=["ativo", "disponivel", "manutencao", "descartado"], required=False)
     custo = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, allow_null=True)
     observacoes = serializers.CharField(required=False, allow_blank=True)
+
+
+class AtivoMaintenanceSerializer(serializers.ModelSerializer):
+    dataManutencao = serializers.DateField(source="data_manutencao")
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+
+    class Meta:
+        model = AtivoMaintenance
+        fields = ("id", "descricao", "custo", "dataManutencao", "createdAt")
+
+
+class AtivoMaintenanceCreateSerializer(serializers.Serializer):
+    descricao = serializers.CharField()
+    custo = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, allow_null=True)
+    dataManutencao = serializers.DateField()
+
+    def validate_descricao(self, value):
+        descricao = value.strip()
+        if not descricao:
+            raise serializers.ValidationError("Descrição obrigatória.")
+        return descricao

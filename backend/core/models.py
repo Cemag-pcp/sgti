@@ -69,11 +69,15 @@ class Comment(models.Model):
 
 
 class SLAConfig(models.Model):
-    prioridade = models.CharField(max_length=20, unique=True)
+    area = models.CharField(max_length=20)
+    prioridade = models.CharField(max_length=20)
     horas = models.PositiveIntegerField()
 
     class Meta:
-        ordering = ["id"]
+        ordering = ["area", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["area", "prioridade"], name="uniq_sla_area_prioridade")
+        ]
 
 
 class TicketHistory(models.Model):
@@ -262,6 +266,7 @@ class Ativo(models.Model):
     responsavel = models.CharField(max_length=150, blank=True, default="")
     data_entrega = models.DateField(null=True, blank=True)
     entregue_por = models.CharField(max_length=150, blank=True, default="")
+    link_termo = models.URLField(blank=True, default="")
     localizacao = models.CharField(max_length=150, blank=True, default="")
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_DISPONIVEL)
     custo = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
@@ -270,3 +275,15 @@ class Ativo(models.Model):
 
     class Meta:
         ordering = ["descricao", "id"]
+
+
+class AtivoMaintenance(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    ativo = models.ForeignKey(Ativo, on_delete=models.CASCADE, related_name="manutencoes")
+    descricao = models.TextField()
+    custo = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    data_manutencao = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-data_manutencao", "-id"]

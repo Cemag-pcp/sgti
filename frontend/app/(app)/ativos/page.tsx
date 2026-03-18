@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
+  createAtivoMaintenanceApi,
   createAtivoApi,
   deleteAtivoApi,
   fetchAtivosApi,
   getAuthToken,
+  type AtivoMaintenanceRecord,
   type AtivoRecord,
   type AtivoStatus,
   updateAtivoApi,
@@ -50,7 +52,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Monitor, Pencil, Plus, Search, Trash2 } from "lucide-react"
+import { ClipboardList, Monitor, Pencil, Plus, Search, Trash2 } from "lucide-react"
 
 type AtivoFormState = {
   descricao: string
@@ -61,10 +63,17 @@ type AtivoFormState = {
   responsavel: string
   dataEntrega: string
   entreguePor: string
+  linkTermo: string
   localizacao: string
   status: AtivoStatus
   custo: string
   observacoes: string
+}
+
+type MaintenanceFormState = {
+  descricao: string
+  custo: string
+  dataManutencao: string
 }
 
 const EMPTY_FORM: AtivoFormState = {
@@ -76,10 +85,17 @@ const EMPTY_FORM: AtivoFormState = {
   responsavel: "",
   dataEntrega: "",
   entreguePor: "",
+  linkTermo: "",
   localizacao: "",
   status: "disponivel",
   custo: "",
   observacoes: "",
+}
+
+const EMPTY_MAINTENANCE_FORM: MaintenanceFormState = {
+  descricao: "",
+  custo: "",
+  dataManutencao: new Date().toISOString().slice(0, 10),
 }
 
 const TIPOS_APARELHO = [
@@ -136,6 +152,11 @@ export default function AtivosPage() {
   const [form, setForm] = useState<AtivoFormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [maintenanceDialogOpen, setMaintenanceDialogOpen] = useState(false)
+  const [maintenanceTarget, setMaintenanceTarget] = useState<AtivoRecord | null>(null)
+  const [maintenanceForm, setMaintenanceForm] = useState<MaintenanceFormState>(EMPTY_MAINTENANCE_FORM)
+  const [maintenanceSaving, setMaintenanceSaving] = useState(false)
+  const [maintenanceError, setMaintenanceError] = useState<string | null>(null)
 
   const [deleteTarget, setDeleteTarget] = useState<AtivoRecord | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -177,6 +198,7 @@ export default function AtivosPage() {
       responsavel: item.responsavel,
       dataEntrega: item.dataEntrega ?? "",
       entreguePor: item.entreguePor,
+      linkTermo: item.linkTermo ?? "",
       localizacao: item.localizacao,
       status: item.status,
       custo: item.custo ?? "",
@@ -184,6 +206,13 @@ export default function AtivosPage() {
     })
     setFormError(null)
     setDialogOpen(true)
+  }
+
+  function openMaintenance(item: AtivoRecord) {
+    setMaintenanceTarget(item)
+    setMaintenanceForm(EMPTY_MAINTENANCE_FORM)
+    setMaintenanceError(null)
+    setMaintenanceDialogOpen(true)
   }
 
   async function handleSave() {
@@ -202,6 +231,7 @@ export default function AtivosPage() {
       responsavel: form.responsavel.trim(),
       dataEntrega: form.dataEntrega || null,
       entreguePor: form.entreguePor.trim(),
+      linkTermo: form.linkTermo.trim(),
       localizacao: form.localizacao.trim(),
       status: form.status,
       custo: form.custo.trim() !== "" ? form.custo.trim() : null,
@@ -243,6 +273,45 @@ export default function AtivosPage() {
     }
   }
 
+  async function handleSaveMaintenance() {
+    if (!maintenanceTarget) return
+    if (!maintenanceForm.descricao.trim()) {
+      setMaintenanceError("Descrição da manutenção é obrigatória.")
+      return
+    }
+
+    const token = getAuthToken()
+    if (!token) {
+      setMaintenanceError("Sessão inválida.")
+      return
+    }
+
+    setMaintenanceSaving(true)
+    setMaintenanceError(null)
+    try {
+      const created = await createAtivoMaintenanceApi(token, maintenanceTarget.id, {
+        descricao: maintenanceForm.descricao.trim(),
+        custo: maintenanceForm.custo.trim() !== "" ? maintenanceForm.custo.trim() : null,
+        dataManutencao: maintenanceForm.dataManutencao,
+      })
+      setList((prev) =>
+        prev.map((item) =>
+          item.id === maintenanceTarget.id
+            ? { ...item, manutencoes: [created, ...(item.manutencoes ?? [])] }
+            : item
+        )
+      )
+      setMaintenanceTarget((prev) =>
+        prev ? { ...prev, manutencoes: [created, ...(prev.manutencoes ?? [])] } : prev
+      )
+      setMaintenanceForm(EMPTY_MAINTENANCE_FORM)
+    } catch (err) {
+      setMaintenanceError(err instanceof Error ? err.message : "Falha ao registrar manutenção.")
+    } finally {
+      setMaintenanceSaving(false)
+    }
+  }
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return list.filter((a) => {
@@ -255,6 +324,7 @@ export default function AtivosPage() {
         a.numeroSerie.toLowerCase().includes(q) ||
         a.responsavel.toLowerCase().includes(q) ||
         a.entreguePor.toLowerCase().includes(q) ||
+        a.linkTermo.toLowerCase().includes(q) ||
         a.localizacao.toLowerCase().includes(q)
       )
     })
@@ -279,20 +349,20 @@ export default function AtivosPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex min-w-0 max-w-full flex-col gap-6 overflow-x-hidden p-4 sm:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
             <Monitor className="h-5 w-5 text-primary" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight">Gestão de Ativos</h1>
             <p className="text-sm text-muted-foreground">Controle de equipamentos e responsáveis</p>
           </div>
         </div>
         {isStaff && (
-          <Button onClick={openCreate} className="gap-2">
+          <Button onClick={openCreate} className="w-full gap-2 sm:w-auto">
             <Plus className="h-4 w-4" />
             Novo Ativo
           </Button>
@@ -344,8 +414,8 @@ export default function AtivosPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="relative min-w-0 flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar por descrição, tipo, tombamento, responsável..."
@@ -355,7 +425,7 @@ export default function AtivosPage() {
           />
         </div>
         <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as AtivoStatus | "todos")}>
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="w-full lg:w-[180px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -376,7 +446,7 @@ export default function AtivosPage() {
       )}
 
       {/* Table */}
-      <Card>
+      <Card className="min-w-0 overflow-hidden">
         <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
@@ -395,8 +465,8 @@ export default function AtivosPage() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="w-full min-w-0">
+              <Table className="w-full table-fixed [&_td]:whitespace-normal [&_td]:break-words [&_th]:min-w-0 [&_th]:whitespace-normal">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="min-w-[180px]">Descrição</TableHead>
@@ -420,6 +490,16 @@ export default function AtivosPage() {
                           {ativo.numeroSerie && (
                             <p className="text-xs text-muted-foreground">S/N: {ativo.numeroSerie}</p>
                           )}
+                          {ativo.linkTermo && (
+                            <a
+                              href={ativo.linkTermo}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-1 block text-xs text-primary underline underline-offset-2"
+                            >
+                              Abrir termo assinado
+                            </a>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>{ativo.tipoAparelho}</TableCell>
@@ -439,6 +519,15 @@ export default function AtivosPage() {
                       {isStaff && (
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => openMaintenance(ativo)}
+                              title="Histórico de manutenção"
+                            >
+                              <ClipboardList className="h-3.5 w-3.5" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -586,6 +675,20 @@ export default function AtivosPage() {
               </div>
 
               {/* Localização */}
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <Label htmlFor="at-link-termo">Link do termo</Label>
+                <Input
+                  id="at-link-termo"
+                  type="url"
+                  placeholder="https://drive.google.com/..."
+                  value={form.linkTermo}
+                  onChange={(e) => setForm((p) => ({ ...p, linkTermo: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Cole aqui o link do Drive com o termo assinado.
+                </p>
+              </div>
+
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="at-local">Localização</Label>
                 <Input
@@ -635,6 +738,98 @@ export default function AtivosPage() {
               {saving ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={maintenanceDialogOpen}
+        onOpenChange={(open) => {
+          if (!maintenanceSaving) setMaintenanceDialogOpen(open)
+          if (!open) {
+            setMaintenanceTarget(null)
+            setMaintenanceForm(EMPTY_MAINTENANCE_FORM)
+            setMaintenanceError(null)
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Histórico de manutenção</DialogTitle>
+            <DialogDescription>
+              {maintenanceTarget
+                ? `Registre e consulte as manutenções do ativo ${maintenanceTarget.descricao}.`
+                : "Registre e consulte as manutenções do ativo."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <div className="grid gap-3 rounded-lg border p-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5 sm:col-span-2">
+                  <Label htmlFor="maintenance-descricao">Descrição</Label>
+                  <Textarea
+                    id="maintenance-descricao"
+                    rows={3}
+                    placeholder="Ex: Ativo enviado para manutenção para troca de teclado."
+                    value={maintenanceForm.descricao}
+                    onChange={(e) => setMaintenanceForm((prev) => ({ ...prev, descricao: e.target.value }))}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="maintenance-data">Data da manutenção</Label>
+                  <Input
+                    id="maintenance-data"
+                    type="date"
+                    value={maintenanceForm.dataManutencao}
+                    onChange={(e) => setMaintenanceForm((prev) => ({ ...prev, dataManutencao: e.target.value }))}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="maintenance-custo">Custo (R$)</Label>
+                  <Input
+                    id="maintenance-custo"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="0,00"
+                    value={maintenanceForm.custo}
+                    onChange={(e) => setMaintenanceForm((prev) => ({ ...prev, custo: e.target.value }))}
+                  />
+                </div>
+              </div>
+              {maintenanceError ? <p className="text-sm text-destructive">{maintenanceError}</p> : null}
+              <div className="flex justify-end">
+                <Button onClick={handleSaveMaintenance} disabled={maintenanceSaving}>
+                  {maintenanceSaving ? "Salvando..." : "Registrar manutenção"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">Lançamentos</h3>
+              {!maintenanceTarget?.manutencoes?.length ? (
+                <p className="text-sm text-muted-foreground">Nenhuma manutenção registrada para este ativo.</p>
+              ) : (
+                <div className="space-y-3">
+                  {maintenanceTarget.manutencoes.map((item: AtivoMaintenanceRecord) => (
+                    <div key={item.id} className="rounded-lg border p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground">{item.descricao}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(item.dataManutencao)}
+                            {item.custo != null
+                              ? ` • ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(item.custo))}`
+                              : ""}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

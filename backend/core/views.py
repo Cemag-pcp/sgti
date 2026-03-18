@@ -8,17 +8,36 @@ import requests as http_client
 from django.conf import settings
 from django.contrib.auth import get_user_model, logout
 from django.core.mail import send_mail
+from django.http import StreamingHttpResponse
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from rest_framework import permissions, status
 from rest_framework.authtoken.models import Token
+from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 logger = logging.getLogger(__name__)
 
+
+class ServerSentEventRenderer(BaseRenderer):
+    media_type = "text/event-stream"
+    format = "sse"
+    charset = None
+    render_style = "binary"
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        if data is None:
+            return b""
+        if isinstance(data, bytes):
+            return data
+        if isinstance(data, str):
+            return data.encode("utf-8")
+        return json.dumps(data, ensure_ascii=False).encode("utf-8")
+
 from .models import (
     Ativo,
+    AtivoMaintenance,
     CategoryConfig,
     Comment,
     ExternalPlatform,
@@ -37,6 +56,8 @@ from .models import (
 )
 from .serializers import (
     AtivoCreateSerializer,
+    AtivoMaintenanceCreateSerializer,
+    AtivoMaintenanceSerializer,
     AtivoSerializer,
     AtivoUpdateSerializer,
     CategoryConfigCreateSerializer,
@@ -88,6 +109,7 @@ def _ativo_from_data(ativo, data):
         ("responsavel", "responsavel"),
         ("dataEntrega", "data_entrega"),
         ("entreguePor", "entregue_por"),
+        ("linkTermo", "link_termo"),
         ("localizacao", "localizacao"),
         ("status", "status"),
         ("custo", "custo"),
@@ -401,18 +423,36 @@ def _build_default_metadata(context):
     }
 
 DEFAULT_SLA_CONFIGS = [
-    {"prioridade": "Crítica", "horas": 4},
-    {"prioridade": "Alta", "horas": 24},
-    {"prioridade": "Média", "horas": 48},
-    {"prioridade": "Baixa", "horas": 120},
+    {"area": "Dev", "prioridade": "Crítica", "horas": 4},
+    {"area": "Dev", "prioridade": "Alta", "horas": 24},
+    {"area": "Dev", "prioridade": "Média", "horas": 48},
+    {"area": "Dev", "prioridade": "Baixa", "horas": 120},
+    {"area": "Infra", "prioridade": "Crítica", "horas": 4},
+    {"area": "Infra", "prioridade": "Alta", "horas": 24},
+    {"area": "Infra", "prioridade": "Média", "horas": 48},
+    {"area": "Infra", "prioridade": "Baixa", "horas": 120},
 ]
 UserModel = get_user_model()
 
 
 def ensure_default_sla_configs():
-    if SLAConfig.objects.exists():
-        return
-    SLAConfig.objects.bulk_create([SLAConfig(**item) for item in DEFAULT_SLA_CONFIGS])
+    existing_pairs = set(SLAConfig.objects.values_list("area", "prioridade"))
+    missing = [
+        SLAConfig(**item)
+        for item in DEFAULT_SLA_CONFIGS
+        if (item["area"], item["prioridade"]) not in existing_pairs
+    ]
+    if missing:
+        SLAConfig.objects.bulk_create(missing)
+
+
+def get_sla_hours(area, prioridade, default=48):
+    ensure_default_sla_configs()
+    sla = SLAConfig.objects.filter(area=area, prioridade=prioridade).first()
+    if sla:
+        return sla.horas
+    fallback = SLAConfig.objects.filter(prioridade=prioridade).order_by("id").first()
+    return fallback.horas if fallback else default
 
 
 DEFAULT_CATEGORIES = [
@@ -556,6 +596,33 @@ def get_user_role(user):
     return UserProfile.ROLE_SOLICITANTE
 
 
+def get_sse_user(request):
+    user = getattr(request, "user", None)
+    if user and getattr(user, "is_authenticated", False):
+        return user
+    token_key = (request.GET.get("token") or "").strip()
+    if not token_key:
+        return None
+    token = Token.objects.select_related("user").filter(key=token_key).first()
+    if not token or not token.user or not token.user.is_active:
+        return None
+    return token.user
+
+
+def ensure_sse_tech_or_staff_user(request):
+    user = get_sse_user(request)
+    if not user:
+        return None, Response({"detail": "Autenticacao necessaria."}, status=status.HTTP_401_UNAUTHORIZED)
+    role = get_user_role(user)
+    if role not in {UserProfile.ROLE_TECNICO, UserProfile.ROLE_GESTOR}:
+        return None, Response({"detail": "Acesso restrito a tecnicos e gestores."}, status=status.HTTP_403_FORBIDDEN)
+    return user, None
+
+
+def sse_event_payload(event, data):
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
 class HealthCheckView(APIView):
     def get(self, request):
         return Response(
@@ -650,7 +717,8 @@ class SLAConfigListView(APIView):
         if denied:
             return denied
         ensure_default_sla_configs()
-        return Response(SLAConfigSerializer(SLAConfig.objects.all(), many=True).data)
+        slas = SLAConfig.objects.all().order_by("area", "id")
+        return Response(SLAConfigSerializer(slas, many=True).data)
 
 
 class SLAConfigUpdateView(APIView):
@@ -662,9 +730,12 @@ class SLAConfigUpdateView(APIView):
             return denied
         ensure_default_sla_configs()
 
+        area = request.data.get("area")
         prioridade = request.data.get("prioridade")
         horas = request.data.get("horas")
 
+        if area not in {"Dev", "Infra"}:
+            return Response({"detail": "Área é obrigatória."}, status=status.HTTP_400_BAD_REQUEST)
         if not prioridade:
             return Response({"detail": "Prioridade Ã© obrigatÃ³ria."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -676,9 +747,9 @@ class SLAConfigUpdateView(APIView):
         if horas <= 0:
             return Response({"detail": "Horas deve ser maior que zero."}, status=status.HTTP_400_BAD_REQUEST)
 
-        sla = SLAConfig.objects.filter(prioridade=prioridade).first()
+        sla = SLAConfig.objects.filter(area=area, prioridade=prioridade).first()
         if not sla:
-            return Response({"detail": "Prioridade nÃ£o encontrada."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "SLA nÃ£o encontrado."}, status=status.HTTP_404_NOT_FOUND)
 
         sla.horas = horas
         sla.save(update_fields=["horas"])
@@ -930,7 +1001,7 @@ class WhatsappChatSessionListView(APIView):
             last_msg = last_messages.get(session.numero)
             item["lastMessage"] = last_msg.texto if last_msg else ""
             item["lastDirection"] = last_msg.direcao if last_msg else ""
-            item["lastAt"] = last_msg.created_at if last_msg else None
+            item["lastAt"] = last_msg.created_at.isoformat() if last_msg and last_msg.created_at else None
             items.append(item)
         return Response(items)
 
@@ -978,6 +1049,105 @@ class WhatsappChatMessagesView(APIView):
             ticket_id=data.get("ticketId", ""),
         )
         return Response(WhatsappChatMessageSerializer(message).data, status=status.HTTP_201_CREATED)
+
+
+class WhatsappChatSessionStreamView(APIView):
+    permission_classes = [permissions.AllowAny]
+    renderer_classes = [ServerSentEventRenderer]
+
+    def get(self, request):
+        user, denied = ensure_sse_tech_or_staff_user(request)
+        if denied:
+            return denied
+
+        def build_payload():
+            sessions = list(WhatsappSession.objects.select_related("user").all())
+            numeros = [session.numero for session in sessions]
+            last_messages = {}
+            if numeros:
+                for msg in WhatsappMessage.objects.filter(numero__in=numeros).order_by("-created_at", "-id"):
+                    if msg.numero not in last_messages:
+                        last_messages[msg.numero] = msg
+                    if len(last_messages) == len(numeros):
+                        break
+
+            items = []
+            for session in sessions:
+                item = WhatsappSessionSerializer(session).data
+                last_msg = last_messages.get(session.numero)
+                item["lastMessage"] = last_msg.texto if last_msg else ""
+                item["lastDirection"] = last_msg.direcao if last_msg else ""
+                item["lastAt"] = last_msg.created_at.isoformat() if last_msg and last_msg.created_at else None
+                items.append(item)
+            items.sort(key=lambda value: value.get("lastAt") or "", reverse=True)
+            return items
+
+        def event_stream():
+            last_marker = None
+            yield sse_event_payload("ready", {"ok": True, "userId": user.id})
+            while True:
+                latest_msg = WhatsappMessage.objects.order_by("-created_at", "-id").values("id", "created_at").first()
+                latest_session = WhatsappSession.objects.order_by("-updated_at", "-id").values("id", "updated_at").first()
+                marker = (
+                    latest_msg["id"] if latest_msg else 0,
+                    latest_msg["created_at"].isoformat() if latest_msg and latest_msg["created_at"] else "",
+                    latest_session["id"] if latest_session else 0,
+                    latest_session["updated_at"].isoformat() if latest_session and latest_session["updated_at"] else "",
+                )
+                if marker != last_marker:
+                    last_marker = marker
+                    yield sse_event_payload("sessions", build_payload())
+                else:
+                    yield ": ping\n\n"
+                time.sleep(3)
+
+        response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
+
+
+class WhatsappChatMessageStreamView(APIView):
+    permission_classes = [permissions.AllowAny]
+    renderer_classes = [ServerSentEventRenderer]
+
+    def get(self, request, numero):
+        _, denied = ensure_sse_tech_or_staff_user(request)
+        if denied:
+            return denied
+        chat_numero = normalize_whatsapp_numero(numero)
+        if not chat_numero:
+            return Response({"detail": "Numero invalido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        def build_payload():
+            messages = WhatsappMessage.objects.filter(numero=chat_numero).order_by("created_at", "id")
+            return WhatsappChatMessageSerializer(messages, many=True).data
+
+        def event_stream():
+            last_marker = None
+            yield sse_event_payload("ready", {"ok": True, "numero": chat_numero})
+            while True:
+                latest_msg = (
+                    WhatsappMessage.objects.filter(numero=chat_numero)
+                    .order_by("-created_at", "-id")
+                    .values("id", "created_at")
+                    .first()
+                )
+                marker = (
+                    latest_msg["id"] if latest_msg else 0,
+                    latest_msg["created_at"].isoformat() if latest_msg and latest_msg["created_at"] else "",
+                )
+                if marker != last_marker:
+                    last_marker = marker
+                    yield sse_event_payload("messages", build_payload())
+                else:
+                    yield ": ping\n\n"
+                time.sleep(2)
+
+        response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
 
 
 class InternalAppListCreateView(APIView):
@@ -1045,9 +1215,7 @@ class TicketCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        ensure_default_sla_configs()
-        sla = SLAConfig.objects.filter(prioridade=data["prioridade"]).first()
-        sla_hours = sla.horas if sla else 48
+        sla_hours = get_sla_hours(data["area"], data["prioridade"])
 
         now = timezone.now()
         next_number = self._next_ticket_number()
@@ -1245,9 +1413,7 @@ class PublicTicketCreateView(APIView):
         if not user:
             return Response({"detail": "MatrÃ­cula invÃ¡lida."}, status=status.HTTP_400_BAD_REQUEST)
 
-        ensure_default_sla_configs()
-        sla = SLAConfig.objects.filter(prioridade=data["prioridade"]).first()
-        sla_hours = sla.horas if sla else 48
+        sla_hours = get_sla_hours(data["area"], data["prioridade"])
 
         now = timezone.now()
         next_number = TicketCreateView()._next_ticket_number()
@@ -1615,6 +1781,7 @@ class AtivoListCreateView(APIView):
             responsavel=data.get("responsavel", ""),
             data_entrega=data.get("dataEntrega"),
             entregue_por=data.get("entreguePor", ""),
+            link_termo=data.get("linkTermo", ""),
             localizacao=data.get("localizacao", ""),
             status=data.get("status", "disponivel"),
             custo=data.get("custo"),
@@ -1648,6 +1815,38 @@ class AtivoDetailView(APIView):
             return Response({"detail": "Ativo não encontrado."}, status=status.HTTP_404_NOT_FOUND)
         ativo.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AtivoMaintenanceListCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, ativo_id):
+        denied = ensure_staff_user(request)
+        if denied:
+            return denied
+        ativo = Ativo.objects.filter(id=ativo_id).first()
+        if not ativo:
+            return Response({"detail": "Ativo não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        manutencoes = ativo.manutencoes.all().order_by("-data_manutencao", "-id")
+        return Response(AtivoMaintenanceSerializer(manutencoes, many=True).data)
+
+    def post(self, request, ativo_id):
+        denied = ensure_staff_user(request)
+        if denied:
+            return denied
+        ativo = Ativo.objects.filter(id=ativo_id).first()
+        if not ativo:
+            return Response({"detail": "Ativo não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = AtivoMaintenanceCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        manutencao = AtivoMaintenance.objects.create(
+            ativo=ativo,
+            descricao=data["descricao"],
+            custo=data.get("custo"),
+            data_manutencao=data["dataManutencao"],
+        )
+        return Response(AtivoMaintenanceSerializer(manutencao).data, status=status.HTTP_201_CREATED)
 
 
 # ---------------------------------------------------------------------------
@@ -2125,13 +2324,14 @@ class WhatsappWebhookView(APIView):
 
     def _priority_options(self):
         ensure_default_sla_configs()
-        priorities = list(SLAConfig.objects.values_list("prioridade", flat=True))
+        priorities = list(SLAConfig.objects.filter(area="Infra").values_list("prioridade", flat=True))
+        if not priorities:
+            priorities = list(SLAConfig.objects.values_list("prioridade", flat=True))
         order = {"Crítica": 0, "Alta": 1, "Média": 2, "Baixa": 3}
         priorities.sort(key=lambda value: (order.get(value, 99), value))
         return priorities
 
     def _build_ticket_from_context(self, session: "WhatsappSession", context):
-        ensure_default_sla_configs()
         ensure_default_categories()
 
         area = "Infra" if context.get("area") == "Infra" else "Dev"
@@ -2143,8 +2343,7 @@ class WhatsappWebhookView(APIView):
 
         categoria_nome = ""
 
-        sla = SLAConfig.objects.filter(prioridade=prioridade).first()
-        sla_hours = sla.horas if sla else 48
+        sla_hours = get_sla_hours(area, prioridade)
 
         localizacao = None
         numero_tombamento = None

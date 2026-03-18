@@ -101,6 +101,7 @@ export interface TicketExecution {
 }
 
 export interface SLAConfig {
+  area: Area
   prioridade: Priority
   horas: number
 }

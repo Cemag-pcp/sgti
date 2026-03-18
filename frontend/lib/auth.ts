@@ -37,6 +37,7 @@ export interface AppBootstrapResponse {
 }
 
 export interface SlaConfigResponse {
+  area: "Dev" | "Infra"
   prioridade: string
   horas: number
 }
@@ -149,6 +150,14 @@ export interface ExternalPlatformRecord {
 
 export type AtivoStatus = "ativo" | "disponivel" | "manutencao" | "descartado"
 
+export interface AtivoMaintenanceRecord {
+  id: number
+  descricao: string
+  custo: string | null
+  dataManutencao: string
+  createdAt: string
+}
+
 export interface AtivoRecord {
   id: number
   descricao: string
@@ -158,10 +167,12 @@ export interface AtivoRecord {
   responsavel: string
   dataEntrega: string | null
   entreguePor: string
+  linkTermo: string
   localizacao: string
   status: AtivoStatus
   custo: string | null
   observacoes: string
+  manutencoes: AtivoMaintenanceRecord[]
   createdAt: string
 }
 
@@ -278,14 +289,14 @@ export async function fetchSlaConfigs(token: string) {
   return data as SlaConfigResponse[]
 }
 
-export async function updateSlaConfig(token: string, prioridade: string, horas: number) {
+export async function updateSlaConfig(token: string, area: "Dev" | "Infra", prioridade: string, horas: number) {
   const response = await fetch(`${getApiBaseUrl()}/api/settings/sla/update/`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Token ${token}`,
     },
-    body: JSON.stringify({ prioridade, horas }),
+    body: JSON.stringify({ area, prioridade, horas }),
   })
 
   const data = await response.json().catch(() => null)
@@ -1053,6 +1064,7 @@ export async function createAtivoApi(
     responsavel?: string
     dataEntrega?: string | null
     entreguePor?: string
+    linkTermo?: string
     localizacao?: string
     status?: AtivoStatus
     custo?: string | null
@@ -1082,6 +1094,7 @@ export async function updateAtivoApi(
     responsavel: string
     dataEntrega: string | null
     entreguePor: string
+    linkTermo: string
     localizacao: string
     status: AtivoStatus
     custo: string | null
@@ -1109,6 +1122,40 @@ export async function deleteAtivoApi(token: string, ativoId: number) {
     const data = await response.json().catch(() => null)
     throw new Error(typeof data?.detail === "string" ? data.detail : "Falha ao excluir ativo.")
   }
+}
+
+export async function fetchAtivoMaintenanceApi(token: string, ativoId: number) {
+  const response = await fetch(`${getApiBaseUrl()}/api/ativos/${ativoId}/maintenance/`, {
+    headers: { Authorization: `Token ${token}` },
+  })
+  const data = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(typeof data?.detail === "string" ? data.detail : "Falha ao carregar histórico de manutenção.")
+  }
+  return data as AtivoMaintenanceRecord[]
+}
+
+export async function createAtivoMaintenanceApi(
+  token: string,
+  ativoId: number,
+  payload: { descricao: string; custo?: string | null; dataManutencao: string }
+) {
+  const response = await fetch(`${getApiBaseUrl()}/api/ativos/${ativoId}/maintenance/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
+    body: JSON.stringify(payload),
+  })
+  const data = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(
+      typeof data?.detail === "string"
+        ? data.detail
+        : typeof data?.descricao?.[0] === "string"
+          ? data.descricao[0]
+          : "Falha ao registrar manutenção."
+    )
+  }
+  return data as AtivoMaintenanceRecord
 }
 
 // ─── WhatsApp Bot Management ─────────────────────────────────────────────────
