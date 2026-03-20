@@ -67,7 +67,10 @@ services:
       PORT: 3333
       BACKEND_WEBHOOK_URL: ${BACKEND_WEBHOOK_URL:-https://instead-greeting-oklahoma-booking.trycloudflare.com/api/whatsapp/webhook/}
       BACKEND_WEBHOOK_TOKEN: ${WHATSAPP_WEBHOOK_SECRET:-}
-      FORWARD_INCOMING_TO_BACKEND: ${FORWARD_INCOMING_TO_BACKEND:-true}
+      FORWARD_INCOMING_TO_BACKEND: "true"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     ports:
       - "3333:3333"
     volumes:
