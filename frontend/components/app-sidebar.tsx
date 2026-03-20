@@ -14,8 +14,6 @@ import {
   MapPin,
   Tag,
   Users,
-  MessageCircle,
-  MessageSquareText,
 } from "lucide-react"
 import {
   Sidebar,
@@ -49,11 +47,6 @@ const navItems = [
   { label: "Plataformas Externas", href: "/plataformas-externas", icon: Globe },
   { label: "Gestão de Ativos", href: "/ativos", icon: Monitor },
   { label: "Configurações", href: "/configuracoes", icon: Settings },
-]
-
-const whatsappItems = [
-  { label: "WhatsApp", href: "/whatsapp", icon: MessageCircle },
-  { label: "Chat WhatsApp", href: "/whatsapp/chat", icon: MessageSquareText },
 ]
 
 export function AppSidebar() {
@@ -114,29 +107,6 @@ export function AppSidebar() {
                     {item.href === "/solicitacoes" && openCount > 0 && (
                       <SidebarMenuBadge>{openCount}</SidebarMenuBadge>
                     )}
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>WhatsApp</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {whatsappItems.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  (item.href !== "/whatsapp" && pathname.startsWith(item.href + "/"))
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
-                      <Link href={item.href}>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
                   </SidebarMenuItem>
                 )
               })}

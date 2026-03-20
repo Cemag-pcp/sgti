@@ -51,7 +51,7 @@ SECRET_KEY = 'django-insecure-^j2x*3cw#whes9%8iq9zisfqu6+(9(7!^xo8ok%sz3_dhpl4qi
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver", "host.docker.internal", "backend"]
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver", "host.docker.internal", "backend", ".trycloudflare.com"]
 
 # WhatsApp
 WHATSAPP_PROVIDER = os.getenv("WHATSAPP_PROVIDER", "BOT").strip().upper()

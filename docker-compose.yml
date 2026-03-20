@@ -48,7 +48,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      NEXT_PUBLIC_API_BASE_URL: https://instead-greeting-oklahoma-booking.trycloudflare.com
     networks:
       - app_net
     depends_on:
@@ -65,7 +65,7 @@ services:
     restart: unless-stopped
     environment:
       PORT: 3333
-      BACKEND_WEBHOOK_URL: ${BACKEND_WEBHOOK_URL:-http://backend:8000/api/whatsapp/webhook/}
+      BACKEND_WEBHOOK_URL: ${BACKEND_WEBHOOK_URL:-https://instead-greeting-oklahoma-booking.trycloudflare.com/api/whatsapp/webhook/}
       BACKEND_WEBHOOK_TOKEN: ${WHATSAPP_WEBHOOK_SECRET:-}
       FORWARD_INCOMING_TO_BACKEND: ${FORWARD_INCOMING_TO_BACKEND:-true}
     ports:
