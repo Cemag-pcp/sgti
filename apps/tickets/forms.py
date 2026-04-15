@@ -1,5 +1,5 @@
 from django import forms
-from .models import Ticket, TimeEntry, TicketObservation, SLAConfig, Location
+from .models import Ticket, TimeEntry, TicketObservation, SLAConfig, Location, Device
 
 
 class TicketSubmitForm(forms.ModelForm):
@@ -22,21 +22,24 @@ class TicketSubmitForm(forms.ModelForm):
 
     class Meta:
         model = Ticket
-        fields = ['title', 'description', 'category', 'priority', 'location']
+        fields = ['title', 'description', 'category', 'priority', 'location', 'device']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['location'].queryset = Location.objects.filter(is_active=True)
         self.fields['location'].empty_label = 'Escolha o setor'
         self.fields['location'].required = True
-        field_order = ['matricula', 'requester_name', 'title', 'description', 'category', 'priority', 'location', 'asset_tag']
+        self.fields['device'].queryset = Device.objects.filter(is_active=True)
+        self.fields['device'].empty_label = 'Escolha o dispositivo'
+        self.fields['device'].required = True
+        field_order = ['matricula', 'requester_name', 'title', 'description', 'category', 'priority', 'location', 'device', 'asset_tag']
         self.order_fields(field_order)
 
 
 class TicketEditForm(forms.ModelForm):
     class Meta:
         model = Ticket
-        fields = ['title', 'description', 'category', 'area', 'priority', 'location', 'due_date', 'asset']
+        fields = ['title', 'description', 'category', 'area', 'priority', 'location', 'device', 'due_date', 'asset']
         widgets = {
             'due_date': forms.DateInput(attrs={'type': 'date'}),
         }
@@ -46,6 +49,9 @@ class TicketEditForm(forms.ModelForm):
         self.fields['location'].queryset = Location.objects.filter(is_active=True)
         self.fields['location'].empty_label = 'Selecione o setor (opcional)'
         self.fields['location'].required = False
+        self.fields['device'].queryset = Device.objects.filter(is_active=True)
+        self.fields['device'].empty_label = 'Selecione o dispositivo (opcional)'
+        self.fields['device'].required = False
 
 
 class TicketAssignForm(forms.ModelForm):
@@ -85,6 +91,16 @@ class LocationForm(forms.ModelForm):
         fields = ['name', 'description', 'is_active']
         widgets = {
             'name': forms.TextInput(attrs={'placeholder': 'Ex: TI, RH, Financeiro'}),
+            'description': forms.TextInput(attrs={'placeholder': 'Descrição opcional'}),
+        }
+
+
+class DeviceForm(forms.ModelForm):
+    class Meta:
+        model = Device
+        fields = ['name', 'description', 'is_active']
+        widgets = {
+            'name': forms.TextInput(attrs={'placeholder': 'Ex: Impressora, Notebook, Desktop'}),
             'description': forms.TextInput(attrs={'placeholder': 'Descrição opcional'}),
         }
 

@@ -19,6 +19,21 @@ class Location(models.Model):
         return self.name
 
 
+class Device(models.Model):
+    name = models.CharField(max_length=100, unique=True, verbose_name='Nome')
+    description = models.CharField(max_length=200, blank=True, verbose_name='Descrição')
+    is_active = models.BooleanField(default=True, verbose_name='Ativo')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Dispositivo'
+        verbose_name_plural = 'Dispositivos'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
 class WhatsAppConversation(models.Model):
     AWAITING_COMMAND = 'AWAITING_COMMAND'
     AWAITING_MATRICULA = 'AWAITING_MATRICULA'
@@ -148,6 +163,14 @@ class Ticket(models.Model):
         blank=True,
         related_name='tickets',
         verbose_name='Localização / Setor',
+    )
+    device = models.ForeignKey(
+        Device,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tickets',
+        verbose_name='Dispositivo',
     )
 
     due_date = models.DateField(null=True, blank=True, verbose_name='Prazo')

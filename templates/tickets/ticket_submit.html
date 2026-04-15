@@ -17,6 +17,13 @@
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
   <h1 class="text-xl font-bold text-gray-900 mb-2">Abrir chamado de TI</h1>
   <p class="text-gray-500 text-sm mb-6">Preencha os dados abaixo para registrar sua solicitação.</p>
+  <div class="mb-6 rounded-xl border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-800">
+    Para solicitar via WhatsApp clique aqui:
+    <a href="https://wa.me/558598470077" target="_blank" rel="noopener noreferrer"
+      class="font-semibold text-green-900 underline underline-offset-2 hover:text-green-700">
+      558598470077
+    </a>
+  </div>
 
   <form method="post" class="space-y-5">
     {% csrf_token %}
@@ -109,6 +116,24 @@
         </option>
         {% endfor %}
       </select>
+      {% if form.location.errors %}
+      <p class="mt-1 text-xs text-red-600">{{ form.location.errors.0 }}</p>
+      {% endif %}
+    </div>
+
+    <div>
+      <label class="form-label">Dispositivo *</label>
+      <select name="device" id="id_device" class="form-input" required>
+        <option value="">Escolha o dispositivo</option>
+        {% for device in form.fields.device.queryset %}
+        <option value="{{ device.pk }}" {% if form.device.value == device.pk|stringformat:"s" %}selected{% endif %}>
+          {{ device.name }}{% if device.description %} — {{ device.description }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      {% if form.device.errors %}
+      <p class="mt-1 text-xs text-red-600">{{ form.device.errors.0 }}</p>
+      {% endif %}
     </div>
 
     <div>
@@ -165,6 +190,12 @@
 
   new TomSelect('#id_location', {
     placeholder: 'Digite para buscar o setor...',
+    allowEmptyOption: true,
+    maxOptions: null,
+  });
+
+  new TomSelect('#id_device', {
+    placeholder: 'Digite para buscar o dispositivo...',
     allowEmptyOption: true,
     maxOptions: null,
   });

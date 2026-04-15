@@ -5,7 +5,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from apps.accounts.models import RequesterProfile
-from apps.tickets.models import Location, Ticket, WhatsAppConversation
+from apps.tickets.models import Device, Location, Ticket, WhatsAppConversation
 from apps.tickets.whatsapp import (
     WhatsAppAPIError,
     build_whatsapp_headers,
@@ -100,6 +100,25 @@ class WhatsAppWebhookTests(SimpleTestCase):
 class TicketCreateApiTests(TestCase):
     def setUp(self):
         self.location = Location.objects.create(name='TI')
+        self.device = Device.objects.create(name='Notebook')
+        self.inactive_device = Device.objects.create(name='Desktop', is_active=False)
+
+    def test_api_lists_only_active_devices(self):
+        response = self.client.get(reverse('tickets:api_devices'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                'devices': [
+                    {
+                        'id': self.device.id,
+                        'name': 'Notebook',
+                        'description': '',
+                    }
+                ]
+            },
+        )
 
     def test_api_creates_ticket_with_requester_contacts(self):
         payload = {
@@ -113,6 +132,7 @@ class TicketCreateApiTests(TestCase):
             'category': Ticket.HARDWARE,
             'priority': Ticket.HIGH,
             'location_name': 'TI',
+            'device_name': 'Notebook',
         }
 
         response = self.client.post(
@@ -129,6 +149,7 @@ class TicketCreateApiTests(TestCase):
         self.assertEqual(body['status'], 'created')
         self.assertEqual(ticket.requester, requester)
         self.assertEqual(ticket.location, self.location)
+        self.assertEqual(ticket.device, self.device)
         self.assertEqual(ticket.priority, Ticket.HIGH)
         self.assertEqual(requester.email, 'maria@empresa.com')
         self.assertEqual(requester.phone, '1133334444')

@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Dispositivos — SGTI{% endblock %}
+{% block page_title %}Dispositivos{% endblock %}
+
+{% block header_actions %}
+<button onclick="openModal()" class="btn-primary">
+  <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+  </svg>
+  Novo dispositivo
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+  {% if devices %}
+  <table class="w-full">
+    <thead class="bg-gray-50 border-b border-gray-100">
+      <tr>
+        <th class="table-th">Nome</th>
+        <th class="table-th">Descrição</th>
+        <th class="table-th">Chamados</th>
+        <th class="table-th text-center">Status</th>
+        <th class="table-th"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-50">
+      {% for device in devices %}
+      <tr class="hover:bg-gray-50 transition-colors">
+        <td class="table-td font-medium text-gray-900">{{ device.name }}</td>
+        <td class="table-td text-gray-500">{{ device.description|default:"—" }}</td>
+        <td class="table-td text-gray-500">{{ device.tickets.count }}</td>
+        <td class="table-td text-center">
+          {% if device.is_active %}
+          <span class="badge bg-green-100 text-green-700">Ativo</span>
+          {% else %}
+          <span class="badge bg-gray-100 text-gray-500">Inativo</span>
+          {% endif %}
+        </td>
+        <td class="table-td text-right space-x-3">
+          <button onclick="openModal({
+              pk: {{ device.pk }},
+              name: '{{ device.name|escapejs }}',
+              description: '{{ device.description|escapejs }}',
+              is_active: {{ device.is_active|yesno:'true,false' }}
+            })"
+            class="text-blue-600 hover:text-blue-700 text-xs font-medium">Editar</button>
+          <button onclick="openDeleteModal({{ device.pk }}, '{{ device.name|escapejs }}')"
+            class="text-red-500 hover:text-red-600 text-xs font-medium">Remover</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="text-center py-16">
+    <svg class="w-12 h-12 text-gray-200 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+    </svg>
+    <p class="text-gray-400 font-medium">Nenhum dispositivo cadastrado</p>
+    <p class="text-gray-300 text-sm mt-1">
+      <button onclick="openModal()" class="text-blue-500">Cadastre o primeiro dispositivo</button>
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<div id="device-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <h2 id="modal-title" class="font-semibold text-gray-900">Novo dispositivo</h2>
+      <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <form id="device-form" method="post" action="{% url 'tickets:device_create' %}"
+      class="px-6 py-5 space-y-4">
+      {% csrf_token %}
+
+      <div>
+        <label class="form-label">Nome *</label>
+        <input type="text" name="name" id="f-name"
+          value="{{ device_form.name.value|default:'' }}"
+          class="form-input {% if device_form.name.errors %}border-red-400{% endif %}"
+          placeholder="Ex: Impressora, Notebook, Desktop" required>
+        {% if device_form.name.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ device_form.name.errors.0 }}</p>{% endif %}
+      </div>
+
+      <div>
+        <label class="form-label">Descrição</label>
+        <input type="text" name="description" id="f-description"
+          value="{{ device_form.description.value|default:'' }}"
+          class="form-input" placeholder="Descrição opcional">
+      </div>
+
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="is_active" id="f-is_active"
+          class="w-4 h-4 rounded border-gray-300 text-blue-600"
+          {% if device_form.is_active.value != False %}checked{% endif %}>
+        <label for="f-is_active" class="text-sm text-gray-700">Ativo</label>
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary flex-1 justify-center">Salvar</button>
+        <button type="button" onclick="closeModal()" class="btn-secondary flex-1 justify-center">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="delete-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+    <div class="px-6 py-5">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="font-semibold text-gray-900">Remover dispositivo</h3>
+          <p class="text-sm text-gray-500">Esta ação não pode ser desfeita.</p>
+        </div>
+      </div>
+      <p class="text-sm text-gray-600 mb-5">Remover <strong id="delete-name"></strong>?
+        Os chamados vinculados não serão excluídos.</p>
+      <form id="delete-form" method="post">
+        {% csrf_token %}
+        <div class="flex gap-3">
+          <button type="submit" class="btn-danger flex-1 justify-center">Remover</button>
+          <button type="button" onclick="closeDeleteModal()" class="btn-secondary flex-1 justify-center">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const createUrl = "{% url 'tickets:device_create' %}";
+
+  function openModal(data) {
+    const form  = document.getElementById('device-form');
+    const title = document.getElementById('modal-title');
+
+    if (data) {
+      title.textContent = 'Editar dispositivo';
+      form.action = `/tickets/config/devices/${data.pk}/edit/`;
+      document.getElementById('f-name').value = data.name;
+      document.getElementById('f-description').value = data.description;
+      document.getElementById('f-is_active').checked = data.is_active;
+    } else {
+      title.textContent = 'Novo dispositivo';
+      form.action = createUrl;
+      form.reset();
+      document.getElementById('f-is_active').checked = true;
+    }
+
+    document.getElementById('device-modal').classList.remove('hidden');
+  }
+
+  function closeModal() {
+    document.getElementById('device-modal').classList.add('hidden');
+  }
+
+  function openDeleteModal(pk, name) {
+    document.getElementById('delete-name').textContent = name;
+    document.getElementById('delete-form').action = `/tickets/config/devices/${pk}/delete/`;
+    document.getElementById('delete-modal').classList.remove('hidden');
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('delete-modal').classList.add('hidden');
+  }
+
+  {% if open_modal %}
+  document.addEventListener('DOMContentLoaded', () => openModal({% if edit_pk %}{ pk: {{ edit_pk }}, name: '{{ device_form.name.value|escapejs }}', description: '{{ device_form.description.value|escapejs }}', is_active: {{ device_form.is_active.value|yesno:'true,false' }} }{% else %}null{% endif %}));
+  {% endif %}
+</script>
+{% endblock %}

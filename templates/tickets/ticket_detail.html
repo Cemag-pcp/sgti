@@ -188,6 +188,13 @@
           <dd class="text-gray-700">{{ ticket.get_category_display }}</dd>
         </div>
         <div>
+          <dt class="text-gray-400 text-xs uppercase tracking-wide mb-0.5">Dispositivo</dt>
+          <dd class="text-gray-700">{{ ticket.device.name|default:"—" }}</dd>
+          {% if ticket.device.description %}
+          <dd class="text-gray-400 text-xs">{{ ticket.device.description }}</dd>
+          {% endif %}
+        </div>
+        <div>
           <dt class="text-gray-400 text-xs uppercase tracking-wide mb-0.5">Área</dt>
           <dd class="text-gray-700">{{ ticket.get_area_display|default:"-" }}</dd>
         </div>

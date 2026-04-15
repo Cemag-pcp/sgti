@@ -4,6 +4,7 @@ from . import views
 app_name = 'tickets'
 
 urlpatterns = [
+    path('api/devices/', views.DeviceListApiView.as_view(), name='api_devices'),
     path('api/open/', views.TicketCreateApiView.as_view(), name='api_open'),
     path('webhooks/whatsapp/', views.WhatsAppWebhookView.as_view(), name='whatsapp_webhook'),
     path('', views.TicketListView.as_view(), name='list'),
@@ -21,4 +22,8 @@ urlpatterns = [
     path('config/locations/create/', views.LocationCreateView.as_view(), name='location_create'),
     path('config/locations/<int:pk>/edit/', views.LocationUpdateView.as_view(), name='location_edit'),
     path('config/locations/<int:pk>/delete/', views.LocationDeleteView.as_view(), name='location_delete'),
+    path('config/devices/', views.DeviceListView.as_view(), name='device_list'),
+    path('config/devices/create/', views.DeviceCreateView.as_view(), name='device_create'),
+    path('config/devices/<int:pk>/edit/', views.DeviceUpdateView.as_view(), name='device_edit'),
+    path('config/devices/<int:pk>/delete/', views.DeviceDeleteView.as_view(), name='device_delete'),
 ]

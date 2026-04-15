@@ -1,11 +1,11 @@
 from django.contrib import admin
-from .models import Ticket, TimeEntry, TicketObservation, StatusHistory, SLAConfig, Location
+from .models import Ticket, TimeEntry, TicketObservation, StatusHistory, SLAConfig, Location, Device
 
 
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
-    list_display = ['ticket_number', 'title', 'requester', 'priority', 'status', 'assigned_to', 'created_at']
-    list_filter = ['status', 'priority', 'category']
+    list_display = ['ticket_number', 'title', 'requester', 'device', 'priority', 'status', 'assigned_to', 'created_at']
+    list_filter = ['status', 'priority', 'category', 'device']
     search_fields = ['ticket_number', 'title', 'description']
     ordering = ['-created_at']
     readonly_fields = ['ticket_number', 'created_at', 'updated_at']
@@ -37,6 +37,13 @@ class SLAConfigAdmin(admin.ModelAdmin):
 
 @admin.register(Location)
 class LocationAdmin(admin.ModelAdmin):
+    list_display = ['name', 'description', 'is_active', 'created_at']
+    list_filter = ['is_active']
+    search_fields = ['name', 'description']
+
+
+@admin.register(Device)
+class DeviceAdmin(admin.ModelAdmin):
     list_display = ['name', 'description', 'is_active', 'created_at']
     list_filter = ['is_active']
     search_fields = ['name', 'description']

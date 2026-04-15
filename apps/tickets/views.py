@@ -1,11 +1,10 @@
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse_lazy, reverse
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.decorators import method_decorator
@@ -16,13 +15,12 @@ import json
 
 from apps.core.mixins import TechnicianRequiredMixin, SupervisorRequiredMixin
 from apps.accounts.models import CustomUser, RequesterProfile
-from apps.assets.models import Asset
-from .models import Ticket, TimeEntry, TicketObservation, StatusHistory, SLAConfig, Location
+from .models import Ticket, TimeEntry, TicketObservation, StatusHistory, SLAConfig, Location, Device
 from .forms import (
     TicketSubmitForm, TicketEditForm,
     TimeEntryForm, ObservationForm,
     TicketAssignForm, TicketStatusForm,
-    LocationForm,
+    LocationForm, DeviceForm,
 )
 from .services import create_ticket_from_submission
 from .whatsapp import send_whatsapp_text_message
@@ -40,6 +38,18 @@ class RequesterLookupView(View):
             return JsonResponse({'found': True, 'full_name': requester.full_name})
         except RequesterProfile.DoesNotExist:
             return JsonResponse({'found': False})
+
+
+class DeviceListApiView(View):
+    http_method_names = ['get']
+
+    def get(self, request, *args, **kwargs):
+        devices = list(
+            Device.objects.filter(is_active=True)
+            .order_by('name')
+            .values('id', 'name', 'description')
+        )
+        return JsonResponse({'devices': devices})
 
 
 class TicketListView(TechnicianRequiredMixin, ListView):
@@ -321,28 +331,6 @@ class TicketSubmitView(CreateView):
     template_name = 'tickets/ticket_submit.html'
     form_class = TicketSubmitForm
 
-    def form_valid(self, form):
-        matricula = form.cleaned_data['matricula']
-        full_name = form.cleaned_data['requester_name']
-        requester, _ = RequesterProfile.objects.get_or_create(
-            matricula=matricula,
-            defaults={'full_name': full_name},
-        )
-        ticket = form.save(commit=False)
-        ticket.requester = requester
-        if self.request.user.is_authenticated:
-            ticket.created_by = self.request.user
-        asset_tag = form.cleaned_data.get('asset_tag', '').strip()
-        if asset_tag:
-            try:
-                ticket.asset = Asset.objects.get(asset_tag=asset_tag)
-            except Asset.DoesNotExist:
-                form.add_error('asset_tag', f'Tombamento "{asset_tag}" não encontrado.')
-                return self.form_invalid(form)
-        ticket.save()
-        messages.success(self.request, f'Chamado {ticket.ticket_number} aberto com sucesso!')
-        return redirect('tickets:submit')
-
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         matricula = self.request.GET.get('matricula', '')
@@ -384,7 +372,7 @@ class TicketDetailView(TechnicianRequiredMixin, DetailView):
 
     def get_queryset(self):
         return Ticket.objects.select_related(
-            'requester', 'assigned_to', 'created_by', 'asset'
+            'requester', 'assigned_to', 'created_by', 'asset', 'location', 'device'
         ).prefetch_related('observations__author', 'time_entries__technician', 'status_history__changed_by')
 
     def get_context_data(self, **kwargs):
@@ -549,6 +537,15 @@ def _location_list_context(request, form=None, open_modal=False, edit_pk=None):
     }
 
 
+def _device_list_context(request, form=None, open_modal=False, edit_pk=None):
+    return {
+        'devices': Device.objects.order_by('name'),
+        'device_form': form or DeviceForm(),
+        'open_modal': open_modal,
+        'edit_pk': edit_pk,
+    }
+
+
 class LocationListView(SupervisorRequiredMixin, View):
     def get(self, request):
         return render(request, 'tickets/location_list.html', _location_list_context(request))
@@ -584,6 +581,45 @@ class LocationDeleteView(SupervisorRequiredMixin, View):
         location.delete()
         messages.success(request, f'Localização "{name}" removida.')
         return redirect('tickets:location_list')
+
+
+class DeviceListView(SupervisorRequiredMixin, View):
+    def get(self, request):
+        return render(request, 'tickets/device_list.html', _device_list_context(request))
+
+
+class DeviceCreateView(SupervisorRequiredMixin, View):
+    def post(self, request):
+        form = DeviceForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Dispositivo cadastrado com sucesso.')
+            return redirect('tickets:device_list')
+        return render(request, 'tickets/device_list.html',
+                      _device_list_context(request, form=form, open_modal=True))
+
+
+class DeviceUpdateView(SupervisorRequiredMixin, View):
+    def post(self, request, pk):
+        device = get_object_or_404(Device, pk=pk)
+        form = DeviceForm(request.POST, instance=device)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Dispositivo atualizado.')
+            return redirect('tickets:device_list')
+        return render(request, 'tickets/device_list.html',
+                      _device_list_context(request, form=form, open_modal=True, edit_pk=pk))
+
+
+class DeviceDeleteView(SupervisorRequiredMixin, View):
+    def post(self, request, pk):
+        device = get_object_or_404(Device, pk=pk)
+        name = device.name
+        device.delete()
+        messages.success(request, f'Dispositivo "{name}" removido.')
+        return redirect('tickets:device_list')
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 class TicketCreateApiView(View):
     http_method_names = ['post']
@@ -602,6 +638,7 @@ class TicketCreateApiView(View):
             'category': str(payload.get('category', Ticket.OTHER)).strip() or Ticket.OTHER,
             'priority': str(payload.get('priority', Ticket.MEDIUM)).strip() or Ticket.MEDIUM,
             'location': payload.get('location_id', ''),
+            'device': payload.get('device_id', ''),
             'asset_tag': str(payload.get('asset_tag', '')).strip(),
         }
 
@@ -610,6 +647,12 @@ class TicketCreateApiView(View):
             if location_name:
                 location = Location.objects.filter(name__iexact=location_name, is_active=True).first()
                 form_data['location'] = location.pk if location else ''
+
+        if not form_data['device']:
+            device_name = str(payload.get('device_name', '')).strip()
+            if device_name:
+                device = Device.objects.filter(name__iexact=device_name, is_active=True).first()
+                form_data['device'] = device.pk if device else ''
 
         form = TicketSubmitForm(form_data)
         if not form.is_valid():
@@ -638,6 +681,7 @@ class TicketCreateApiView(View):
                     'category': ticket.category,
                     'requester_id': ticket.requester_id,
                     'location_id': ticket.location_id,
+                    'device_id': ticket.device_id,
                 },
             },
             status=201,
