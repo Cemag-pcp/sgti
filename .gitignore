@@ -34,6 +34,8 @@ pip-wheel-metadata/
 .eggs/
 build/
 dist/
+!static/dist/
+!static/dist/output.css
 
 # Virtual environments
 .venv/
@@ -56,9 +58,6 @@ yarn-error.log*
 pnpm-debug.log*
 .npm/
 .pnpm-store/
-
-# Frontend build output
-static/dist/
 
 # IDEs and local tooling
 .vscode/
