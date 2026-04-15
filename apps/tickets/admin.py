@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Ticket, TimeEntry, TicketObservation, StatusHistory, SLAConfig, Location, Device
+from .models import Ticket, TimeEntry, TicketObservation, StatusHistory, SLAConfig, Location, Device, BrowserPushSubscription
 
 
 @admin.register(Ticket)
@@ -47,3 +47,10 @@ class DeviceAdmin(admin.ModelAdmin):
     list_display = ['name', 'description', 'is_active', 'created_at']
     list_filter = ['is_active']
     search_fields = ['name', 'description']
+
+
+@admin.register(BrowserPushSubscription)
+class BrowserPushSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ['user', 'is_active', 'updated_at', 'last_success_at']
+    list_filter = ['is_active']
+    search_fields = ['user__email', 'user__full_name', 'endpoint']

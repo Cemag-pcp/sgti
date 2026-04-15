@@ -39,6 +39,30 @@
 
   </div>
 
+  {% if user.is_authenticated %}
+  <div id="notification-prompt"
+    class="fixed bottom-4 right-4 z-50 hidden max-w-sm rounded-2xl border border-blue-100 bg-white p-4 shadow-xl">
+    <div class="flex items-start gap-3">
+      <div class="mt-0.5 rounded-full bg-blue-100 p-2 text-blue-600">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+        </svg>
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="text-sm font-semibold text-gray-900">Ativar notificações</p>
+        <p class="mt-1 text-sm text-gray-600">
+          Permita notificações do navegador para receber aviso quando um novo chamado for aberto.
+        </p>
+        <div class="mt-3 flex gap-2">
+          <button type="button" id="notification-enable-btn" class="btn-primary">Ativar</button>
+          <button type="button" id="notification-dismiss-btn" class="btn-secondary">Agora não</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <script>
     const SIDEBAR_STORAGE_KEY = 'sgti.sidebar.collapsed';
 
@@ -96,5 +120,203 @@
     });
   </script>
   {% block extra_js %}{% endblock %}
+
+  {% if user.is_authenticated %}
+  <script>
+  (function () {
+    // Som de notificação via Web Audio API (sem arquivo externo)
+    let audioCtx = null;
+
+    function ensureAudioContext() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function playNotificationSound() {
+      try {
+        const ctx = ensureAudioContext();
+        const now = ctx.currentTime;
+        [880, 1100].forEach(function (freq, i) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0, now + i * 0.12);
+          gain.gain.linearRampToValueAtTime(0.25, now + i * 0.12 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.2);
+          osc.start(now + i * 0.12);
+          osc.stop(now + i * 0.12 + 0.2);
+        });
+      } catch (e) {}
+    }
+
+    // Inicializa o AudioContext na primeira interação do usuário (exigência dos navegadores)
+    document.addEventListener('click', ensureAudioContext, { once: true });
+
+    // Escuta mensagem do Service Worker para tocar o som
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', function (event) {
+        if (event.data && event.data.type === 'NEW_TICKET_SOUND') {
+          playNotificationSound();
+        }
+      });
+    }
+
+    const SUBSCRIPTION_URL = '{% url "tickets:push_subscription" %}';
+    const DISMISS_KEY = 'sgti.notifications.dismissed';
+    const PUBLIC_KEY = '{{ webpush_public_key|default:"" }}';
+    let serviceWorkerRegistration = null;
+    let currentSubscription = null;
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    }
+
+    function getCsrfToken() {
+      const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    async function sendSubscriptionToServer(subscription) {
+      const response = await fetch(SUBSCRIPTION_URL, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+      return response.ok;
+    }
+
+    async function deleteSubscriptionFromServer(subscription) {
+      const response = await fetch(SUBSCRIPTION_URL, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({ endpoint: subscription.endpoint }),
+      });
+      return response.ok;
+    }
+
+    async function registerServiceWorker() {
+      if (!('serviceWorker' in navigator)) return null;
+      try {
+        serviceWorkerRegistration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      } catch (error) {
+        serviceWorkerRegistration = null;
+      }
+      return serviceWorkerRegistration;
+    }
+
+    async function loadCurrentSubscription() {
+      if (!serviceWorkerRegistration || !('PushManager' in window)) return null;
+      currentSubscription = await serviceWorkerRegistration.pushManager.getSubscription();
+      return currentSubscription;
+    }
+
+    function showPrompt() {
+      const prompt = document.getElementById('notification-prompt');
+      if (!prompt || !PUBLIC_KEY || localStorage.getItem(DISMISS_KEY) === '1') return;
+      prompt.classList.remove('hidden');
+    }
+
+    function hidePrompt(dismissPermanently) {
+      const prompt = document.getElementById('notification-prompt');
+      if (!prompt) return;
+      prompt.classList.add('hidden');
+      if (dismissPermanently) {
+        localStorage.setItem(DISMISS_KEY, '1');
+      }
+    }
+
+    async function ensurePushSubscription() {
+      if (!PUBLIC_KEY || !serviceWorkerRegistration || !('PushManager' in window)) return null;
+      let subscription = await loadCurrentSubscription();
+      if (!subscription) {
+        subscription = await serviceWorkerRegistration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(PUBLIC_KEY),
+        });
+      }
+      currentSubscription = subscription;
+      await sendSubscriptionToServer(subscription);
+      return subscription;
+    }
+
+    async function requestPermissionFromUser() {
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted') {
+        localStorage.removeItem(DISMISS_KEY);
+        hidePrompt(false);
+        await ensurePushSubscription();
+      }
+      return perm;
+    }
+
+    async function init() {
+      if (!('Notification' in window) || !PUBLIC_KEY) return;
+      await registerServiceWorker();
+
+      if (Notification.permission === 'granted') {
+        await ensurePushSubscription();
+      } else if (Notification.permission === 'default') {
+        showPrompt();
+      }
+    }
+
+    window.sgtiNotifications = {
+      requestPermission: requestPermissionFromUser,
+      ensurePushSubscription: ensurePushSubscription,
+      getState: function () {
+        return {
+          permission: Notification.permission,
+          publicKeyConfigured: Boolean(PUBLIC_KEY),
+          hasServiceWorker: Boolean(serviceWorkerRegistration),
+          subscribed: Boolean(currentSubscription),
+          endpoint: currentSubscription ? currentSubscription.endpoint : null,
+        };
+      },
+      unsubscribe: async function () {
+        const subscription = await loadCurrentSubscription();
+        if (!subscription) return false;
+        await deleteSubscriptionFromServer(subscription);
+        const unsubscribed = await subscription.unsubscribe();
+        currentSubscription = null;
+        return unsubscribed;
+      },
+    };
+
+    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', function () {
+      const enableButton = document.getElementById('notification-enable-btn');
+      const dismissButton = document.getElementById('notification-dismiss-btn');
+
+      if (enableButton) {
+        enableButton.addEventListener('click', requestPermissionFromUser);
+      }
+      if (dismissButton) {
+        dismissButton.addEventListener('click', function () {
+          hidePrompt(true);
+        });
+      }
+    });
+  })();
+  </script>
+  {% endif %}
 </body>
 </html>

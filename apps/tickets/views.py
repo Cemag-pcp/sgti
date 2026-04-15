@@ -15,7 +15,7 @@ import json
 
 from apps.core.mixins import TechnicianRequiredMixin, SupervisorRequiredMixin
 from apps.accounts.models import CustomUser, RequesterProfile
-from .models import Ticket, TimeEntry, TicketObservation, StatusHistory, SLAConfig, Location, Device
+from .models import Ticket, TimeEntry, TicketObservation, StatusHistory, SLAConfig, Location, Device, BrowserPushSubscription
 from .forms import (
     TicketSubmitForm, TicketEditForm,
     TimeEntryForm, ObservationForm,
@@ -50,6 +50,50 @@ class DeviceListApiView(View):
             .values('id', 'name', 'description')
         )
         return JsonResponse({'devices': devices})
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PushSubscriptionView(TechnicianRequiredMixin, View):
+    http_method_names = ['post', 'delete']
+
+    def post(self, request, *args, **kwargs):
+        try:
+            payload = json.loads(request.body or b'{}')
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'invalid_json'}, status=400)
+
+        endpoint = str(payload.get('endpoint', '')).strip()
+        keys = payload.get('keys') or {}
+        p256dh = str(keys.get('p256dh', '')).strip()
+        auth = str(keys.get('auth', '')).strip()
+
+        if not endpoint or not p256dh or not auth:
+            return JsonResponse({'error': 'invalid_subscription'}, status=400)
+
+        subscription, _ = BrowserPushSubscription.objects.update_or_create(
+            endpoint=endpoint,
+            defaults={
+                'user': request.user,
+                'p256dh': p256dh,
+                'auth': auth,
+                'user_agent': request.META.get('HTTP_USER_AGENT', '')[:255],
+                'is_active': True,
+            },
+        )
+        return JsonResponse({'status': 'subscribed', 'id': subscription.id})
+
+    def delete(self, request, *args, **kwargs):
+        try:
+            payload = json.loads(request.body or b'{}')
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'invalid_json'}, status=400)
+
+        endpoint = str(payload.get('endpoint', '')).strip()
+        if not endpoint:
+            return JsonResponse({'error': 'invalid_subscription'}, status=400)
+
+        BrowserPushSubscription.objects.filter(endpoint=endpoint, user=request.user).update(is_active=False)
+        return JsonResponse({'status': 'unsubscribed'})
 
 
 class TicketListView(TechnicianRequiredMixin, ListView):
@@ -686,6 +730,37 @@ class TicketCreateApiView(View):
             },
             status=201,
         )
+
+
+class TicketNotificationsPollView(TechnicianRequiredMixin, View):
+    """Retorna chamados abertos desde o timestamp informado (para notificações do navegador)."""
+    http_method_names = ['get']
+
+    def get(self, request):
+        since_str = request.GET.get('since', '')
+        from django.utils.dateparse import parse_datetime
+        since = parse_datetime(since_str) if since_str else None
+        if since is None:
+            # Sem referência: retorna vazio (apenas inicializa o timestamp no cliente)
+            return JsonResponse({'tickets': [], 'server_time': timezone.now().isoformat()})
+
+        new_tickets = (
+            Ticket.objects
+            .filter(created_at__gt=since)
+            .order_by('created_at')
+            .values('id', 'ticket_number', 'title', 'priority', 'created_at')
+        )
+        results = [
+            {
+                'id': t['id'],
+                'ticket_number': t['ticket_number'],
+                'title': t['title'],
+                'priority': t['priority'],
+                'created_at': t['created_at'].isoformat(),
+            }
+            for t in new_tickets
+        ]
+        return JsonResponse({'tickets': results, 'server_time': timezone.now().isoformat()})
 
 
 class WhatsAppWebhookView(View):

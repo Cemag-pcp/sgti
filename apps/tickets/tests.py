@@ -1,17 +1,20 @@
 import json
 from unittest.mock import patch
+from django.db import transaction
 
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
-from apps.accounts.models import RequesterProfile
-from apps.tickets.models import Device, Location, Ticket, WhatsAppConversation
+from apps.accounts.models import CustomUser, RequesterProfile
+from apps.tickets.models import BrowserPushSubscription, Device, Location, Ticket, WhatsAppConversation
 from apps.tickets.whatsapp import (
     WhatsAppAPIError,
     build_whatsapp_headers,
     send_whatsapp_text_message,
 )
 from apps.tickets.whatsapp_bot import process_incoming_whatsapp_message
+from datetime import timedelta
 
 
 class WhatsAppServiceTests(SimpleTestCase):
@@ -164,6 +167,126 @@ class TicketCreateApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()['error'], 'validation_error')
+
+
+class TicketNotificationsPollTests(TestCase):
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(
+            email='notifier@example.com',
+            password='12345678',
+            full_name='Notifier User',
+            role=CustomUser.TECHNICIAN,
+        )
+        self.requester = RequesterProfile.objects.create(
+            matricula='77777',
+            full_name='Solicitante Teste',
+        )
+
+    def test_poll_requires_since_to_return_tickets(self):
+        self.client.force_login(self.user)
+        Ticket.objects.create(
+            requester=self.requester,
+            title='Sem referencia',
+            description='Teste sem since',
+        )
+
+        response = self.client.get(reverse('tickets:notifications_poll'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['tickets'], [])
+        self.assertIn('server_time', response.json())
+
+    def test_poll_returns_new_tickets_after_given_timestamp(self):
+        self.client.force_login(self.user)
+        reference = timezone.now() - timedelta(minutes=1)
+        ticket = Ticket.objects.create(
+            requester=self.requester,
+            title='Novo chamado monitorado',
+            description='Teste de polling',
+            priority=Ticket.HIGH,
+        )
+
+        response = self.client.get(
+            reverse('tickets:notifications_poll'),
+            {'since': reference.isoformat()},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(len(body['tickets']), 1)
+        self.assertEqual(body['tickets'][0]['id'], ticket.id)
+        self.assertEqual(body['tickets'][0]['ticket_number'], ticket.ticket_number)
+        self.assertEqual(body['tickets'][0]['priority'], Ticket.HIGH)
+        self.assertIn('server_time', body)
+
+
+class PushSubscriptionTests(TestCase):
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(
+            email='push@example.com',
+            password='12345678',
+            full_name='Push User',
+            role=CustomUser.TECHNICIAN,
+        )
+
+    def test_subscribe_creates_subscription(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('tickets:push_subscription'),
+            data=json.dumps(
+                {
+                    'endpoint': 'https://example.com/push/123',
+                    'keys': {
+                        'p256dh': 'test-p256dh',
+                        'auth': 'test-auth',
+                    },
+                }
+            ),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        subscription = BrowserPushSubscription.objects.get(endpoint='https://example.com/push/123')
+        self.assertEqual(subscription.user, self.user)
+        self.assertTrue(subscription.is_active)
+
+    def test_delete_marks_subscription_inactive(self):
+        self.client.force_login(self.user)
+        BrowserPushSubscription.objects.create(
+            user=self.user,
+            endpoint='https://example.com/push/123',
+            p256dh='test-p256dh',
+            auth='test-auth',
+        )
+
+        response = self.client.delete(
+            reverse('tickets:push_subscription'),
+            data=json.dumps({'endpoint': 'https://example.com/push/123'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(BrowserPushSubscription.objects.get(endpoint='https://example.com/push/123').is_active)
+
+
+class TicketWebPushSignalTests(TestCase):
+    @patch('apps.tickets.signals.send_ticket_push_notification')
+    def test_ticket_creation_triggers_webpush_after_commit(self, mock_send):
+        requester = RequesterProfile.objects.create(
+            matricula='99123',
+            full_name='Signal Test',
+        )
+
+        with transaction.atomic():
+            ticket = Ticket.objects.create(
+                requester=requester,
+                title='Chamado com push',
+                description='Teste de envio web push',
+            )
+            self.assertFalse(mock_send.called)
+
+        mock_send.assert_called_once_with(ticket)
 
 
 class WhatsAppBotFlowTests(TestCase):

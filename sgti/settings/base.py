@@ -46,6 +46,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'apps.core.context_processors.webpush',
             ],
         },
     },
@@ -107,3 +108,7 @@ WHATSAPP_MESSAGES_URL = config(
         else ''
     ),
 )
+
+WEBPUSH_VAPID_PUBLIC_KEY = config('WEBPUSH_VAPID_PUBLIC_KEY', default='')
+WEBPUSH_VAPID_PRIVATE_KEY = config('WEBPUSH_VAPID_PRIVATE_KEY', default='')
+WEBPUSH_VAPID_ADMIN_EMAIL = config('WEBPUSH_VAPID_ADMIN_EMAIL', default='admin@localhost')

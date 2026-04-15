@@ -34,6 +34,31 @@ class Device(models.Model):
         return self.name
 
 
+class BrowserPushSubscription(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='push_subscriptions',
+        verbose_name='Usuário',
+    )
+    endpoint = models.TextField(unique=True, verbose_name='Endpoint')
+    p256dh = models.CharField(max_length=255, verbose_name='Chave p256dh')
+    auth = models.CharField(max_length=255, verbose_name='Chave auth')
+    user_agent = models.CharField(max_length=255, blank=True, verbose_name='User-Agent')
+    is_active = models.BooleanField(default=True, verbose_name='Ativo')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_success_at = models.DateTimeField(null=True, blank=True, verbose_name='Último envio com sucesso')
+
+    class Meta:
+        verbose_name = 'Inscrição de push'
+        verbose_name_plural = 'Inscrições de push'
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f'{self.user} — {self.endpoint[:48]}'
+
+
 class WhatsAppConversation(models.Model):
     AWAITING_COMMAND = 'AWAITING_COMMAND'
     AWAITING_MATRICULA = 'AWAITING_MATRICULA'
@@ -260,8 +285,8 @@ class Ticket(models.Model):
         if self.is_overdue:
             return 'Atrasado'
         if self.is_active:
-            return f'Prazo {self.due_date:%d/%m/%Y}'
-        return f'Concluído em prazo {self.due_date:%d/%m/%Y}'
+            return f'{self.due_date:%d/%m/%Y}'
+        return f'Concluído em {self.due_date:%d/%m/%Y}'
 
     @property
     def sla_flag_class(self):
