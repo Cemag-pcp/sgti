@@ -2,6 +2,7 @@ import traceback
 
 from django.contrib.auth import views as auth_views
 from django.contrib import messages
+from django.http import HttpResponseServerError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import ListView, View
@@ -15,6 +16,12 @@ class LoginView(auth_views.LoginView):
     template_name = 'accounts/login.html'
     authentication_form = CustomAuthenticationForm
     redirect_authenticated_user = True
+
+    def post(self, request, *args, **kwargs):
+        try:
+            return super().post(request, *args, **kwargs)
+        except Exception:
+            return HttpResponseServerError(traceback.format_exc(), content_type='text/plain')
 
     def get_success_url_allowed_hosts(self):
         # Avoid host validation failures on proxied deployments during the
