@@ -1,4 +1,4 @@
-import logging
+import traceback
 
 from django.contrib.auth import views as auth_views
 from django.contrib import messages
@@ -9,8 +9,6 @@ from django.views.generic import ListView, View
 from apps.core.mixins import SupervisorRequiredMixin, TechnicianRequiredMixin
 from .models import CustomUser, RequesterProfile
 from .forms import CustomAuthenticationForm, CustomUserForm, RequesterForm
-
-logger = logging.getLogger(__name__)
 
 
 class LoginView(auth_views.LoginView):
@@ -32,15 +30,18 @@ class LoginView(auth_views.LoginView):
     def form_valid(self, form):
         try:
             return super().form_valid(form)
-        except Exception:
-            logger.exception(
-                'Login failed after authentication',
-                extra={
+        except Exception as exc:
+            print(
+                'LOGIN ERROR',
+                repr(exc),
+                {
                     'request_host': self.request.META.get('HTTP_HOST'),
                     'redirect_to': self.request.POST.get(self.redirect_field_name) or self.request.GET.get(self.redirect_field_name),
                     'user_email': getattr(form.get_user(), 'email', None),
                 },
+                flush=True,
             )
+            traceback.print_exc()
             raise
 
 
