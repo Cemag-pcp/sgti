@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth import views as auth_views
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
@@ -7,6 +9,8 @@ from django.views.generic import ListView, View
 from apps.core.mixins import SupervisorRequiredMixin, TechnicianRequiredMixin
 from .models import CustomUser, RequesterProfile
 from .forms import CustomAuthenticationForm, CustomUserForm, RequesterForm
+
+logger = logging.getLogger(__name__)
 
 
 class LoginView(auth_views.LoginView):
@@ -24,6 +28,20 @@ class LoginView(auth_views.LoginView):
             '127.0.0.1',
             *self.success_url_allowed_hosts,
         }
+
+    def form_valid(self, form):
+        try:
+            return super().form_valid(form)
+        except Exception:
+            logger.exception(
+                'Login failed after authentication',
+                extra={
+                    'request_host': self.request.META.get('HTTP_HOST'),
+                    'redirect_to': self.request.POST.get(self.redirect_field_name) or self.request.GET.get(self.redirect_field_name),
+                    'user_email': getattr(form.get_user(), 'email', None),
+                },
+            )
+            raise
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
