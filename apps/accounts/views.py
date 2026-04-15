@@ -14,6 +14,17 @@ class LoginView(auth_views.LoginView):
     authentication_form = CustomAuthenticationForm
     redirect_authenticated_user = True
 
+    def get_success_url_allowed_hosts(self):
+        # Avoid host validation failures on proxied deployments during the
+        # post-login redirect step.
+        return {
+            'sgti.onrender.com',
+            '.onrender.com',
+            'localhost',
+            '127.0.0.1',
+            *self.success_url_allowed_hosts,
+        }
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
