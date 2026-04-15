@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+
+{% block title %}Aplicativos - SGTI{% endblock %}
+{% block page_title %}Aplicativos{% endblock %}
+
+{% block header_actions %}
+{% if request.user.is_supervisor %}
+<button onclick="openModal()" class="btn-primary">
+  <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+  </svg>
+  Novo aplicativo
+</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<form method="get" class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-5 flex flex-wrap gap-3 items-end">
+  <div class="flex-1 min-w-48">
+    <label class="form-label">Buscar</label>
+    <input type="text" name="q" value="{{ filters.q|default:'' }}" placeholder="Nome, responsável, descricao..."
+      class="form-input">
+  </div>
+  <div>
+    <label class="form-label">Tipo</label>
+    <select name="type" class="form-input">
+      <option value="">Todos</option>
+      {% for value, label in type_choices %}
+      <option value="{{ value }}" {% if filters.type == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="form-label">Status</label>
+    <select name="status" class="form-input">
+      <option value="">Todos</option>
+      <option value="active" {% if filters.status == 'active' %}selected{% endif %}>Ativos</option>
+      <option value="inactive" {% if filters.status == 'inactive' %}selected{% endif %}>Inativos</option>
+    </select>
+  </div>
+  <button type="submit" class="btn-primary">Filtrar</button>
+  {% if filters %}
+  <a href="{% url 'core:application_list' %}" class="btn-secondary">Limpar</a>
+  {% endif %}
+</form>
+
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+  {% if applications %}
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-gray-50 border-b border-gray-100">
+        <tr>
+          <th class="table-th">Nome</th>
+          <th class="table-th">Tipo</th>
+          <th class="table-th">Responsável</th>
+          <th class="table-th">Lançamento</th>
+          <th class="table-th">Descricao</th>
+          <th class="table-th">Status</th>
+          <th class="table-th"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        {% for app in applications %}
+        <tr class="hover:bg-gray-50 transition-colors">
+          <td class="table-td font-medium text-gray-900">
+            <div>{{ app.name }}</div>
+            {% if app.url %}
+            <a href="{{ app.url }}" target="_blank" rel="noopener noreferrer" class="text-xs text-blue-600 hover:text-blue-700">
+              {{ app.url }}
+            </a>
+            {% endif %}
+          </td>
+          <td class="table-td">
+            <span class="badge {% if app.app_type == 'INTERNAL' %}bg-sky-100 text-sky-800{% else %}bg-violet-100 text-violet-800{% endif %}">
+              {{ app.get_app_type_display }}
+            </span>
+          </td>
+          <td class="table-td text-gray-600">{{ app.responsible|default:"-" }}</td>
+          <td class="table-td text-gray-600">{{ app.release_date|date:"d/m/Y"|default:"-" }}</td>
+          <td class="table-td text-gray-600 max-w-md">
+            <div class="truncate">{{ app.description }}</div>
+          </td>
+          <td class="table-td">
+            <span class="badge {% if app.is_active %}bg-green-100 text-green-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+              {% if app.is_active %}Ativo{% else %}Inativo{% endif %}
+            </span>
+          </td>
+          <td class="table-td text-right space-x-3">
+            {% if request.user.is_supervisor %}
+            <button onclick="openModal({
+                pk: {{ app.pk }},
+                name: '{{ app.name|escapejs }}',
+                app_type: '{{ app.app_type }}',
+                responsible: '{{ app.responsible|escapejs }}',
+                url: '{{ app.url|escapejs }}',
+                release_date: '{{ app.release_date|date:"Y-m-d"|default:"" }}',
+                description: '{{ app.description|escapejs }}',
+                notes: '{{ app.notes|escapejs }}',
+                is_active: {{ app.is_active|yesno:'true,false' }}
+              })"
+              class="text-blue-600 hover:text-blue-700 text-xs font-medium">Editar</button>
+            <button onclick="openDeleteModal({{ app.pk }}, '{{ app.name|escapejs }}')"
+              class="text-red-500 hover:text-red-600 text-xs font-medium">Remover</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center py-16">
+    <svg class="w-12 h-12 text-gray-200 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 3.104v5.714a2.143 2.143 0 01-2.143 2.143H3.321m6.429-7.857a48.714 48.714 0 018.25 0m-8.25 0v5.714a2.143 2.143 0 002.143 2.143h4.286m0 0V3.104m0 7.857h4.286a2.143 2.143 0 002.143-2.143V3.104M3.321 10.961v7.5a2.143 2.143 0 002.143 2.143h13.072a2.143 2.143 0 002.143-2.143v-7.5M8.25 14.25h7.5"/>
+    </svg>
+    <p class="text-gray-400 font-medium">Nenhum aplicativo encontrado</p>
+    {% if request.user.is_supervisor %}
+    <p class="text-gray-300 text-sm mt-1">
+      <button onclick="openModal()" class="text-blue-500">Cadastre o primeiro aplicativo</button>
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<div id="application-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+      <h2 id="modal-title" class="font-semibold text-gray-900">Novo aplicativo</h2>
+      <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <form id="application-form" method="post" action="{% url 'core:application_create' %}" class="px-6 py-5 overflow-y-auto flex-1 space-y-4">
+      {% csrf_token %}
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="form-label">Nome *</label>
+          <input type="text" name="name" id="field-name"
+            value="{{ application_form.name.value|default:'' }}"
+            class="form-input {% if application_form.name.errors %}border-red-400{% endif %}"
+            placeholder="Ex: Monday, Ploomes, Automacoes TI" required>
+          {% if application_form.name.errors %}
+          <p class="mt-1 text-xs text-red-600">{{ application_form.name.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div>
+          <label class="form-label">Tipo *</label>
+          <select name="app_type" id="field-app_type" class="form-input">
+            {% for value, label in application_form.fields.app_type.choices %}
+            <option value="{{ value }}" {% if application_form.app_type.value == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="form-label">Responsável</label>
+          <input type="text" name="responsible" id="field-responsible"
+            value="{{ application_form.responsible.value|default:'' }}"
+            class="form-input"
+            placeholder="Ex: TI interna, Comercial, parceiro externo">
+        </div>
+
+        <div>
+          <label class="form-label">URL</label>
+          <input type="url" name="url" id="field-url"
+            value="{{ application_form.url.value|default:'' }}"
+            class="form-input"
+            placeholder="https://...">
+        </div>
+
+        <div>
+          <label class="form-label">Data de lançamento</label>
+          <input type="date" name="release_date" id="field-release_date"
+            value="{{ application_form.release_date.value|default:'' }}"
+            class="form-input">
+        </div>
+      </div>
+
+      <div>
+        <label class="form-label">Descricao *</label>
+        <textarea name="description" id="field-description" rows="3"
+          class="form-input resize-none {% if application_form.description.errors %}border-red-400{% endif %}"
+          required>{{ application_form.description.value|default:'' }}</textarea>
+        {% if application_form.description.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ application_form.description.errors.0 }}</p>
+        {% endif %}
+      </div>
+
+      <div>
+        <label class="form-label">Observacoes</label>
+        <textarea name="notes" id="field-notes" rows="3" class="form-input resize-none">{{ application_form.notes.value|default:'' }}</textarea>
+      </div>
+
+      <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" name="is_active" id="field-is_active" class="rounded border-gray-300" {% if application_form.is_active.value or application_form.is_active.value == None %}checked{% endif %}>
+        Aplicativo ativo
+      </label>
+
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary flex-1 justify-center">Salvar</button>
+        <button type="button" onclick="closeModal()" class="btn-secondary flex-1 justify-center">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="delete-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+    <div class="px-6 py-5">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="font-semibold text-gray-900">Remover aplicativo</h3>
+          <p class="text-sm text-gray-500">Esta acao nao pode ser desfeita.</p>
+        </div>
+      </div>
+      <p class="text-sm text-gray-600 mb-5">Remover <strong id="delete-name"></strong>?</p>
+      <form id="delete-form" method="post">
+        {% csrf_token %}
+        <div class="flex gap-3">
+          <button type="submit" class="btn-danger flex-1 justify-center">Remover</button>
+          <button type="button" onclick="closeDeleteModal()" class="btn-secondary flex-1 justify-center">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const createUrl = "{% url 'core:application_create' %}";
+
+  function openModal(data) {
+    const form = document.getElementById('application-form');
+    const title = document.getElementById('modal-title');
+
+    if (data) {
+      title.textContent = 'Editar aplicativo';
+      form.action = `/applications/${data.pk}/edit/`;
+      document.getElementById('field-name').value = data.name;
+      document.getElementById('field-app_type').value = data.app_type;
+      document.getElementById('field-responsible').value = data.responsible;
+      document.getElementById('field-url').value = data.url;
+      document.getElementById('field-release_date').value = data.release_date;
+      document.getElementById('field-description').value = data.description;
+      document.getElementById('field-notes').value = data.notes;
+      document.getElementById('field-is_active').checked = data.is_active;
+    } else {
+      title.textContent = 'Novo aplicativo';
+      form.action = createUrl;
+      form.reset();
+      document.getElementById('field-is_active').checked = true;
+    }
+
+    document.getElementById('application-modal').classList.remove('hidden');
+  }
+
+  function closeModal() {
+    document.getElementById('application-modal').classList.add('hidden');
+  }
+
+  function openDeleteModal(pk, name) {
+    document.getElementById('delete-name').textContent = name;
+    document.getElementById('delete-form').action = `/applications/${pk}/delete/`;
+    document.getElementById('delete-modal').classList.remove('hidden');
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('delete-modal').classList.add('hidden');
+  }
+
+  {% if open_modal %}
+  document.addEventListener('DOMContentLoaded', () => openModal({% if edit_pk %}{ pk: {{ edit_pk }}, name: '', app_type: 'INTERNAL', responsible: '', url: '', release_date: '', description: '', notes: '', is_active: true }{% else %}null{% endif %}));
+  {% endif %}
+</script>
+{% endblock %}

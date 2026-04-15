@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Abrir Chamado — SGTI{% endblock %}</title>
+  <link rel="stylesheet" href="/static/dist/output.css">
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-50 font-sans antialiased min-h-screen flex flex-col">
+
+  <header class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="max-w-2xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+          </svg>
+        </div>
+        <span class="font-semibold text-gray-900">SGTI</span>
+      </div>
+      <a href="{% url 'accounts:login' %}" class="text-sm text-blue-600 hover:text-blue-700 font-medium">
+        Acesso restrito →
+      </a>
+    </div>
+  </header>
+
+  <main class="flex-1 py-10 px-4">
+    <div class="max-w-2xl mx-auto">
+      {% include "partials/flash_messages.html" %}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <footer class="text-center text-xs text-gray-400 py-4">
+    Sistema de Gestão de Tickets de TI
+  </footer>
+
+  <script>
+    document.addEventListener('submit', function (e) {
+      const btn = e.target.querySelector('[type="submit"]');
+      if (!btn) return;
+      btn.disabled = true;
+      btn.dataset.originalText = btn.innerHTML;
+      btn.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>Aguarde...';
+    });
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

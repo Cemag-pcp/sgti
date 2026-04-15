@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+
+{% block title %}Ativos - SGTI{% endblock %}
+{% block page_title %}Ativos{% endblock %}
+
+{% block header_actions %}
+{% if request.user.is_supervisor %}
+<button onclick="openModal()" class="btn-primary">
+  <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+  </svg>
+  Novo ativo
+</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<form method="get" class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-5 flex flex-wrap gap-3 items-end">
+  <div class="flex-1 min-w-48">
+    <label class="form-label">Buscar</label>
+    <input type="text" name="q" value="{{ filters.q|default:'' }}"
+      placeholder="Patrimonio, marca, modelo..." class="form-input">
+  </div>
+  <div>
+    <label class="form-label">Tipo</label>
+    <select name="type" class="form-input">
+      <option value="">Todos</option>
+      {% for value, label in type_choices %}
+      <option value="{{ value }}" {% if filters.type == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="form-label">Status</label>
+    <select name="status" class="form-input">
+      <option value="">Todos</option>
+      {% for value, label in status_choices %}
+      <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn-primary">Filtrar</button>
+  {% if filters %}<a href="{% url 'assets:list' %}" class="btn-secondary">Limpar</a>{% endif %}
+</form>
+
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+  {% if assets %}
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-gray-50 border-b border-gray-100">
+        <tr>
+          <th class="table-th">Patrimonio</th>
+          <th class="table-th">Tipo</th>
+          <th class="table-th">Marca / Modelo</th>
+          <th class="table-th">Status</th>
+          <th class="table-th">Responsavel</th>
+          <th class="table-th"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        {% for a in assets %}
+        <tr class="hover:bg-gray-50 transition-colors">
+          <td class="table-td font-mono text-xs text-gray-500">{{ a.asset_tag }}</td>
+          <td class="table-td text-gray-600">{{ a.get_asset_type_display }}</td>
+          <td class="table-td font-medium text-gray-900">{{ a.brand }} {{ a.model }}</td>
+          <td class="table-td">
+            <span class="badge
+              {% if a.status == 'ACTIVE' %}bg-green-100 text-green-700
+              {% elif a.status == 'MAINTENANCE' %}bg-yellow-100 text-yellow-700
+              {% elif a.status == 'RETIRED' %}bg-red-100 text-red-700
+              {% else %}bg-gray-100 text-gray-500{% endif %}">
+              {{ a.get_status_display }}
+            </span>
+          </td>
+          <td class="table-td text-gray-500">
+            {% if a.assigned_to_requester %}{{ a.assigned_to_requester.full_name }}
+            {% elif a.assigned_to_staff %}{{ a.assigned_to_staff.full_name }}
+            {% else %}-{% endif %}
+          </td>
+          <td class="table-td text-right space-x-3">
+            <a href="{% url 'assets:detail' a.pk %}"
+              class="text-gray-500 hover:text-gray-700 text-xs font-medium">Ver</a>
+            {% if request.user.is_supervisor %}
+            <button onclick="openModal({
+                pk: {{ a.pk }},
+                asset_tag: '{{ a.asset_tag|escapejs }}',
+                asset_type: '{{ a.asset_type }}',
+                brand: '{{ a.brand|escapejs }}',
+                model: '{{ a.model|escapejs }}',
+                serial_number: '{{ a.serial_number|escapejs }}',
+                os: '{{ a.os|escapejs }}',
+                status: '{{ a.status }}',
+                location: '{{ a.location|escapejs }}',
+                purchase_date: '{{ a.purchase_date|date:"Y-m-d"|default:"" }}',
+                purchase_cost: '{{ a.purchase_cost|default_if_none:"" }}',
+                warranty_until: '{{ a.warranty_until|date:"Y-m-d"|default:"" }}',
+                notes: '{{ a.notes|escapejs }}'
+              })"
+              class="text-blue-600 hover:text-blue-700 text-xs font-medium">Editar</button>
+            <button onclick="openDeleteModal({{ a.pk }}, '{{ a.asset_tag|escapejs }} - {{ a.brand|escapejs }} {{ a.model|escapejs }}')"
+              class="text-red-500 hover:text-red-600 text-xs font-medium">Remover</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  {% else %}
+  <div class="text-center py-16">
+    <svg class="w-12 h-12 text-gray-200 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+    </svg>
+    <p class="text-gray-400 font-medium">Nenhum ativo encontrado</p>
+    {% if request.user.is_supervisor %}
+    <p class="text-gray-300 text-sm mt-1">
+      <button onclick="openModal()" class="text-blue-500">Cadastre o primeiro ativo</button>
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<div id="asset-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+      <h2 id="modal-title" class="font-semibold text-gray-900">Novo ativo</h2>
+      <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <form id="asset-form" method="post" action="{% url 'assets:create' %}"
+      class="px-6 py-5 overflow-y-auto flex-1 space-y-4">
+      {% csrf_token %}
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="form-label">Patrimonio *</label>
+          <input type="text" name="asset_tag" id="f-asset_tag"
+            value="{{ asset_form.asset_tag.value|default:'' }}"
+            class="form-input {% if asset_form.asset_tag.errors %}border-red-400{% endif %}"
+            placeholder="Ex: PAT-001" required>
+          {% if asset_form.asset_tag.errors %}
+          <p class="mt-1 text-xs text-red-600">{{ asset_form.asset_tag.errors.0 }}</p>{% endif %}
+        </div>
+
+        <div>
+          <label class="form-label">Tipo *</label>
+          <select name="asset_type" id="f-asset_type" class="form-input">
+            {% for value, label in asset_form.fields.asset_type.choices %}
+            <option value="{{ value }}"
+              {% if asset_form.asset_type.value == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="form-label">Marca *</label>
+          <input type="text" name="brand" id="f-brand"
+            value="{{ asset_form.brand.value|default:'' }}"
+            class="form-input {% if asset_form.brand.errors %}border-red-400{% endif %}"
+            placeholder="Ex: Dell, Apple" required>
+          {% if asset_form.brand.errors %}
+          <p class="mt-1 text-xs text-red-600">{{ asset_form.brand.errors.0 }}</p>{% endif %}
+        </div>
+
+        <div>
+          <label class="form-label">Modelo *</label>
+          <input type="text" name="model" id="f-model"
+            value="{{ asset_form.model.value|default:'' }}"
+            class="form-input {% if asset_form.model.errors %}border-red-400{% endif %}"
+            placeholder="Ex: Latitude 5520" required>
+          {% if asset_form.model.errors %}
+          <p class="mt-1 text-xs text-red-600">{{ asset_form.model.errors.0 }}</p>{% endif %}
+        </div>
+
+        <div>
+          <label class="form-label">Numero de serie</label>
+          <input type="text" name="serial_number" id="f-serial_number"
+            value="{{ asset_form.serial_number.value|default:'' }}"
+            class="form-input" placeholder="Ex: SN123456">
+        </div>
+
+        <div>
+          <label class="form-label">Sistema operacional</label>
+          <input type="text" name="os" id="f-os"
+            value="{{ asset_form.os.value|default:'' }}"
+            class="form-input" placeholder="Ex: Windows 11 Pro">
+        </div>
+
+        <div>
+          <label class="form-label">Status</label>
+          <select name="status" id="f-status" class="form-input">
+            {% for value, label in asset_form.fields.status.choices %}
+            <option value="{{ value }}"
+              {% if asset_form.status.value == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="form-label">Localizacao</label>
+          <input type="text" name="location" id="f-location"
+            value="{{ asset_form.location.value|default:'' }}"
+            class="form-input" placeholder="Ex: Sala 3, 2 andar">
+        </div>
+
+        <div>
+          <label class="form-label">Data de compra</label>
+          <input type="date" name="purchase_date" id="f-purchase_date"
+            value="{{ asset_form.purchase_date.value|default:'' }}"
+            class="form-input">
+        </div>
+
+        <div>
+          <label class="form-label">Custo</label>
+          <input type="number" name="purchase_cost" id="f-purchase_cost" step="0.01" min="0"
+            value="{{ asset_form.purchase_cost.value|default:'' }}"
+            class="form-input" placeholder="Ex: 3500.00">
+        </div>
+
+        <div>
+          <label class="form-label">Garantia ate</label>
+          <input type="date" name="warranty_until" id="f-warranty_until"
+            value="{{ asset_form.warranty_until.value|default:'' }}"
+            class="form-input">
+        </div>
+      </div>
+
+      <div>
+        <label class="form-label">Observacoes</label>
+        <textarea name="notes" id="f-notes" rows="2"
+          class="form-input resize-none">{{ asset_form.notes.value|default:'' }}</textarea>
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary flex-1 justify-center">Salvar</button>
+        <button type="button" onclick="closeModal()" class="btn-secondary flex-1 justify-center">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="delete-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+    <div class="px-6 py-5">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="font-semibold text-gray-900">Remover ativo</h3>
+          <p class="text-sm text-gray-500">Esta acao nao pode ser desfeita.</p>
+        </div>
+      </div>
+      <p class="text-sm text-gray-600 mb-5">Remover <strong id="delete-name"></strong>?</p>
+      <form id="delete-form" method="post">
+        {% csrf_token %}
+        <div class="flex gap-3">
+          <button type="submit" class="btn-danger flex-1 justify-center">Remover</button>
+          <button type="button" onclick="closeDeleteModal()" class="btn-secondary flex-1 justify-center">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const createUrl = "{% url 'assets:create' %}";
+
+  function openModal(data) {
+    const form = document.getElementById('asset-form');
+    const title = document.getElementById('modal-title');
+
+    if (data) {
+      title.textContent = 'Editar ativo';
+      form.action = `/assets/${data.pk}/edit/`;
+      document.getElementById('f-asset_tag').value = data.asset_tag;
+      document.getElementById('f-asset_type').value = data.asset_type;
+      document.getElementById('f-brand').value = data.brand;
+      document.getElementById('f-model').value = data.model;
+      document.getElementById('f-serial_number').value = data.serial_number;
+      document.getElementById('f-os').value = data.os;
+      document.getElementById('f-status').value = data.status;
+      document.getElementById('f-location').value = data.location;
+      document.getElementById('f-purchase_date').value = data.purchase_date;
+      document.getElementById('f-purchase_cost').value = data.purchase_cost;
+      document.getElementById('f-warranty_until').value = data.warranty_until;
+      document.getElementById('f-notes').value = data.notes;
+    } else {
+      title.textContent = 'Novo ativo';
+      form.action = createUrl;
+      form.reset();
+    }
+
+    document.getElementById('asset-modal').classList.remove('hidden');
+  }
+
+  function closeModal() {
+    document.getElementById('asset-modal').classList.add('hidden');
+  }
+
+  function openDeleteModal(pk, name) {
+    document.getElementById('delete-name').textContent = name;
+    document.getElementById('delete-form').action = `/assets/${pk}/delete/`;
+    document.getElementById('delete-modal').classList.remove('hidden');
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('delete-modal').classList.add('hidden');
+  }
+
+  {% if open_modal %}
+  document.addEventListener('DOMContentLoaded', () => openModal({% if edit_pk %}{ pk: {{ edit_pk }}, asset_tag:'', asset_type:'', brand:'', model:'', serial_number:'', os:'', status:'', location:'', purchase_date:'', purchase_cost:'', warranty_until:'', notes:'' }{% else %}null{% endif %}));
+  {% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}{{ asset.asset_tag }} - SGTI{% endblock %}
+
+{% block page_title %}
+<div class="flex items-center gap-2 text-sm">
+  <a href="{% url 'assets:list' %}" class="text-gray-400 hover:text-gray-600">Ativos</a>
+  <span class="text-gray-300">/</span>
+  <span class="font-mono">{{ asset.asset_tag }}</span>
+</div>
+{% endblock %}
+
+{% block header_actions %}
+{% if is_supervisor %}
+<a href="{% url 'assets:edit' asset.pk %}" class="btn-secondary">Editar</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  <div class="lg:col-span-2 space-y-6">
+    <div class="card">
+      <h2 class="text-lg font-bold text-gray-900 mb-4">{{ asset.brand }} {{ asset.model }}</h2>
+      <dl class="grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Patrimonio</dt>
+          <dd class="font-mono font-medium text-gray-800">{{ asset.asset_tag }}</dd>
+        </div>
+        <div>
+          <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Tipo</dt>
+          <dd class="text-gray-700">{{ asset.get_asset_type_display }}</dd>
+        </div>
+        <div>
+          <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Numero de serie</dt>
+          <dd class="text-gray-700 font-mono">{{ asset.serial_number|default:"-" }}</dd>
+        </div>
+        <div>
+          <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Sistema operacional</dt>
+          <dd class="text-gray-700">{{ asset.os|default:"-" }}</dd>
+        </div>
+        <div>
+          <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Localizacao</dt>
+          <dd class="text-gray-700">{{ asset.location|default:"-" }}</dd>
+        </div>
+        <div>
+          <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Garantia</dt>
+          <dd class="text-gray-700">{{ asset.warranty_until|date:"d/m/Y"|default:"-" }}</dd>
+        </div>
+        <div>
+          <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Custo</dt>
+          <dd class="text-gray-700">
+            {% if asset.purchase_cost is not None %}R$ {{ asset.purchase_cost }}{% else %}-{% endif %}
+          </dd>
+        </div>
+        {% if asset.specs %}
+        <div class="col-span-2">
+          <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Especificacoes</dt>
+          <dd class="text-gray-700 font-mono text-xs bg-gray-50 rounded p-2">{{ asset.specs }}</dd>
+        </div>
+        {% endif %}
+        {% if asset.notes %}
+        <div class="col-span-2">
+          <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Observacoes</dt>
+          <dd class="text-gray-700">{{ asset.notes }}</dd>
+        </div>
+        {% endif %}
+      </dl>
+    </div>
+
+    {% if asset.tickets.all %}
+    <div class="card">
+      <h3 class="font-semibold text-gray-800 mb-4">Chamados relacionados</h3>
+      <div class="space-y-2">
+        {% for ticket in asset.tickets.all|slice:":5" %}
+        <a href="{% url 'tickets:detail' ticket.pk %}"
+          class="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50">
+          <div>
+            <span class="font-mono text-xs text-gray-400">{{ ticket.ticket_number }}</span>
+            <p class="text-sm font-medium text-gray-800">{{ ticket.title }}</p>
+          </div>
+          <span class="badge {{ ticket.status_class }} text-xs">{{ ticket.get_status_display }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if asset.history.all %}
+    <div class="card">
+      <h3 class="font-semibold text-gray-800 mb-4">Historico</h3>
+      <div class="space-y-3">
+        {% for h in asset.history.all %}
+        <div class="flex items-start gap-3 text-sm">
+          <div class="w-2 h-2 rounded-full mt-1.5 flex-shrink-0 {% if h.action == 'MAINTENANCE' %}bg-amber-400{% else %}bg-gray-300{% endif %}"></div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-gray-700 font-medium">{{ h.get_action_display }}</span>
+              {% if h.action == 'MAINTENANCE' %}
+              <span class="badge bg-amber-100 text-amber-800">Manutencao</span>
+              {% endif %}
+              <span class="text-gray-400 text-xs">
+                por {{ h.performed_by.full_name|default:"sistema" }} - {{ h.created_at|date:"d/m/Y H:i" }}
+              </span>
+            </div>
+            {% if h.notes %}<p class="text-sm text-gray-500 mt-1 whitespace-pre-line">{{ h.notes }}</p>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <h3 class="font-semibold text-gray-800 mb-4">Status e responsavel</h3>
+      <dl class="space-y-3 text-sm">
+        <div>
+          <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Status</dt>
+          <dd>
+            <span class="badge {% if asset.status == 'ACTIVE' %}bg-green-100 text-green-700{% elif asset.status == 'MAINTENANCE' %}bg-yellow-100 text-yellow-700{% else %}bg-gray-100 text-gray-500{% endif %}">
+              {{ asset.get_status_display }}
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Responsavel</dt>
+          <dd class="font-medium text-gray-800">
+            {% if asset.assigned_to_requester %}{{ asset.assigned_to_requester.full_name }}
+            {% elif asset.assigned_to_staff %}{{ asset.assigned_to_staff.full_name }}
+            {% else %}<span class="text-gray-400">Nao atribuido</span>{% endif %}
+          </dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h3 class="font-semibold text-gray-800 mb-3">Registrar manutencao</h3>
+      <form method="post" action="{% url 'assets:maintenance' asset.pk %}" class="space-y-3">
+        {% csrf_token %}
+        <div>
+          <label class="form-label">{{ maintenance_form.notes.label }}</label>
+          <textarea name="notes" rows="4" class="form-input resize-none {% if maintenance_form.notes.errors %}border-red-400{% endif %}">{{ maintenance_form.notes.value|default:'' }}</textarea>
+          {% if maintenance_form.notes.errors %}
+          <p class="mt-1 text-xs text-red-600">{{ maintenance_form.notes.errors.0 }}</p>
+          {% endif %}
+        </div>
+        <button type="submit" class="btn-primary w-full justify-center">Adicionar ao historico</button>
+      </form>
+    </div>
+
+    {% if is_supervisor %}
+    <div class="card">
+      <h3 class="font-semibold text-gray-800 mb-3">Atribuir responsavel</h3>
+      <form method="post" action="{% url 'assets:assign' asset.pk %}" class="space-y-3">
+        {% csrf_token %}
+        <div>
+          <label class="form-label">Colaborador</label>
+          <select name="assigned_to_requester" class="form-input">
+            <option value="">Nenhum</option>
+            {% for r in assign_form.fields.assigned_to_requester.queryset %}
+            <option value="{{ r.pk }}" {% if asset.assigned_to_requester_id == r.pk %}selected{% endif %}>
+              {{ r.full_name }} ({{ r.matricula }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Equipe TI</label>
+          <select name="assigned_to_staff" class="form-input">
+            <option value="">Nenhum</option>
+            {% for u in assign_form.fields.assigned_to_staff.queryset %}
+            <option value="{{ u.pk }}" {% if asset.assigned_to_staff_id == u.pk %}selected{% endif %}>
+              {{ u.full_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn-primary w-full justify-center">Salvar</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

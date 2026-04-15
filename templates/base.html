@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SGTI{% endblock %}</title>
+  <link rel="stylesheet" href="/static/dist/output.css">
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-50 font-sans antialiased">
+
+  <div class="flex h-screen overflow-hidden">
+
+    <!-- Overlay mobile -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    {% include "partials/sidebar.html" %}
+
+    <!-- Conteúdo principal -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <header class="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-4 flex-shrink-0">
+        <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+          </svg>
+        </button>
+        <h1 class="text-base font-semibold text-gray-900 flex-1">
+          {% block page_title %}{% endblock %}
+        </h1>
+        {% block header_actions %}{% endblock %}
+      </header>
+
+      <main class="flex-1 overflow-y-auto p-6">
+        {% include "partials/flash_messages.html" %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+
+  </div>
+
+  <script>
+    const SIDEBAR_STORAGE_KEY = 'sgti.sidebar.collapsed';
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      sidebar.classList.toggle('-translate-x-full');
+      overlay.classList.toggle('hidden');
+    }
+
+    function setSidebarCollapsed(collapsed) {
+      const sidebar = document.getElementById('sidebar');
+      const collapseButton = document.querySelector('[onclick="toggleSidebarCollapse()"]');
+      const collapseIconOpen = document.getElementById('sidebar-collapse-open');
+      const collapseIconClosed = document.getElementById('sidebar-collapse-closed');
+
+      if (!sidebar) return;
+
+      sidebar.classList.toggle('lg:w-20', collapsed);
+      sidebar.classList.toggle('lg:w-64', !collapsed);
+      sidebar.classList.toggle('sidebar-collapsed', collapsed);
+
+      if (collapseIconOpen && collapseIconClosed) {
+        collapseIconOpen.classList.toggle('hidden', collapsed);
+        collapseIconClosed.classList.toggle('hidden', !collapsed);
+      }
+
+      if (collapseButton) {
+        const label = collapsed ? 'Expandir sidebar' : 'Contrair sidebar';
+        collapseButton.setAttribute('title', label);
+        collapseButton.setAttribute('aria-label', label);
+      }
+    }
+
+    function toggleSidebarCollapse() {
+      const sidebar = document.getElementById('sidebar');
+      if (!sidebar) return;
+
+      const collapsed = !sidebar.classList.contains('sidebar-collapsed');
+      setSidebarCollapsed(collapsed);
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? '1' : '0');
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      const collapsed = window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1';
+      setSidebarCollapsed(collapsed);
+    });
+
+    document.addEventListener('submit', function (e) {
+      const btn = e.target.querySelector('[type="submit"]');
+      if (!btn) return;
+      btn.disabled = true;
+      btn.dataset.originalText = btn.innerHTML;
+      btn.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>Aguarde...';
+    });
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

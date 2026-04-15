@@ -1,0 +1,190 @@
+{% extends "base_public.html" %}
+
+{% block title %}Abrir Chamado — SGTI{% endblock %}
+
+{% block extra_head %}
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.min.css" rel="stylesheet">
+<style>
+  .ts-wrapper.form-input { padding: 0; }
+  .ts-wrapper .ts-control { border: none; box-shadow: none; padding: 0.5rem 0.75rem; background: transparent; }
+  .ts-wrapper.focus .ts-control { border: none; box-shadow: none; }
+  .ts-dropdown { border-color: #e5e7eb; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / .1); }
+  .ts-dropdown .option.selected, .ts-dropdown .option:hover { background-color: #eff6ff; color: #1d4ed8; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+  <h1 class="text-xl font-bold text-gray-900 mb-2">Abrir chamado de TI</h1>
+  <p class="text-gray-500 text-sm mb-6">Preencha os dados abaixo para registrar sua solicitação.</p>
+
+  <form method="post" class="space-y-5">
+    {% csrf_token %}
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="form-label">Matrícula *</label>
+        <input type="text" name="matricula" id="id_matricula"
+          value="{{ form.matricula.value|default:'' }}"
+          placeholder="Ex: 12345"
+          class="form-input {% if form.matricula.errors %}border-red-400{% endif %}"
+          required>
+        {% if form.matricula.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ form.matricula.errors.0 }}</p>
+        {% endif %}
+        <p class="mt-1 text-xs text-gray-400">Use sua matrícula corporativa</p>
+      </div>
+      <div>
+        <label class="form-label">Nome completo *</label>
+        <input type="text" name="requester_name" id="id_requester_name"
+          value="{% if known_requester %}{{ known_requester.full_name }}{% else %}{{ form.requester_name.value|default:'' }}{% endif %}"
+          placeholder="Seu nome completo"
+          class="form-input {% if form.requester_name.errors %}border-red-400{% endif %}"
+          required>
+        <p id="matricula-hint" class="mt-1 text-xs text-red-600 hidden">Matrícula não encontrada, preencha seu nome.</p>
+        {% if form.requester_name.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ form.requester_name.errors.0 }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div>
+      <label class="form-label">Assunto *</label>
+      <input type="text" name="title" id="id_title"
+        value="{{ form.title.value|default:'' }}"
+        placeholder="Descreva brevemente o problema"
+        class="form-input {% if form.title.errors %}border-red-400{% endif %}"
+        required>
+      <p class="mt-2 text-xs text-gray-400">Opções rápidas:</p>
+      <div class="mt-1 flex flex-wrap gap-2">
+        {% for sugestao in title_suggestions %}
+        <button type="button" onclick="document.getElementById('id_title').value='{{ sugestao }}'"
+          class="text-xs px-3 py-0.5 rounded-full border border-gray-300 text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+          {{ sugestao }}
+        </button>
+        {% endfor %}
+      </div>
+      {% if form.title.errors %}
+      <p class="mt-1 text-xs text-red-600">{{ form.title.errors.0 }}</p>
+      {% endif %}
+    </div>
+
+    <div>
+      <label class="form-label">Descrição detalhada *</label>
+      <textarea name="description" rows="4"
+        placeholder="Descreva o problema com o máximo de detalhes possível..."
+        class="form-input resize-none {% if form.description.errors %}border-red-400{% endif %}"
+        required>{{ form.description.value|default:'' }}</textarea>
+      {% if form.description.errors %}
+      <p class="mt-1 text-xs text-red-600">{{ form.description.errors.0 }}</p>
+      {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="form-label">Categoria</label>
+        <select name="category" class="form-input">
+          {% for value, label in form.fields.category.choices %}
+          <option value="{{ value }}" {% if form.category.value == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Prioridade</label>
+        <select name="priority" class="form-input">
+          {% for value, label in form.fields.priority.choices %}
+          <option value="{{ value }}" {% if form.priority.value == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label class="form-label">Localização / Setor *</label>
+      <select name="location" id="id_location" class="form-input" required>
+        <option value="">Escolha o setor</option>
+        {% for loc in form.fields.location.queryset %}
+        <option value="{{ loc.pk }}" {% if form.location.value == loc.pk|stringformat:"s" %}selected{% endif %}>
+          {{ loc.name }}{% if loc.description %} — {{ loc.description }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label class="form-label">Tombamento</label>
+      <input type="text" name="asset_tag"
+        value="{{ form.asset_tag.value|default:'' }}"
+        placeholder="Número de patrimônio (opcional)"
+        class="form-input {% if form.asset_tag.errors %}border-red-400{% endif %}">
+      {% if form.asset_tag.errors %}
+      <p class="mt-1 text-xs text-red-600">{{ form.asset_tag.errors.0 }}</p>
+      {% endif %}
+    </div>
+
+    <button type="submit" class="btn-primary w-full justify-center py-3 text-base">
+      Enviar solicitação
+    </button>
+  </form>
+</div>
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+<script>
+  // Lookup de matrícula
+  const matriculaInput = document.getElementById('id_matricula');
+  const nameInput = document.getElementById('id_requester_name');
+  const matriculaHint = document.getElementById('matricula-hint');
+
+  function lookupMatricula(matricula) {
+    if (!matricula) return;
+    fetch(`{% url 'tickets:requester_lookup' %}?matricula=${encodeURIComponent(matricula)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.found) {
+          nameInput.value = data.full_name;
+          nameInput.readOnly = true;
+          matriculaHint.classList.add('hidden');
+        } else {
+          nameInput.value = '';
+          nameInput.readOnly = false;
+          matriculaHint.classList.remove('hidden');
+        }
+      });
+  }
+
+  if (matriculaInput) {
+    matriculaInput.addEventListener('blur', function () {
+      lookupMatricula(this.value.trim());
+    });
+    // Dispara no carregamento se já houver valor (ex: após erro de validação)
+    if (matriculaInput.value.trim()) {
+      lookupMatricula(matriculaInput.value.trim());
+    }
+  }
+
+  new TomSelect('#id_location', {
+    placeholder: 'Digite para buscar o setor...',
+    allowEmptyOption: true,
+    maxOptions: null,
+  });
+
+  const slaMap = {{ sla_map|safe }};
+  const hint = document.getElementById('sla-hint');
+  const slaValue = document.getElementById('sla-value');
+  const prioritySelect = document.querySelector('select[name="priority"]');
+
+  if (prioritySelect && hint) {
+    prioritySelect.addEventListener('change', function () {
+      const label = slaMap[this.value];
+      if (label) {
+        slaValue.textContent = label;
+        hint.classList.remove('hidden');
+      } else {
+        hint.classList.add('hidden');
+      }
+    });
+  }
+</script>
+{% endblock %}
+{% endblock %}

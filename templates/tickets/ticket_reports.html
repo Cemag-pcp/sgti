@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+
+{% block title %}Relatórios de Chamados - SGTI{% endblock %}
+{% block page_title %}Relatórios de Chamados{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+  .report-panel {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid #e5e7eb;
+    border-radius: 1rem;
+    box-shadow: 0 10px 30px -22px rgba(15, 23, 42, 0.45);
+  }
+
+  .report-kpi {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .report-kpi::after {
+    content: "";
+    position: absolute;
+    inset: auto -1.5rem -1.5rem auto;
+    width: 5rem;
+    height: 5rem;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.14);
+  }
+  .chart-wrap {
+    position: relative;
+    min-height: 320px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <section class="report-panel p-5">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Painel operacional</p>
+        <h2 class="mt-1 text-2xl font-bold text-slate-900">Indicadores de chamados e SLA</h2>
+        <p class="mt-1 text-sm text-slate-500">Período analisado: {{ report_period_label }}</p>
+      </div>
+      <div class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+        Gráficos interativos com filtro por período, área, setor, prioridade e status
+      </div>
+    </div>
+
+    <form method="get" class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <div>
+        <label class="form-label">De</label>
+        <input type="date" name="date_from" value="{{ filters.date_from }}" class="form-input">
+      </div>
+      <div>
+        <label class="form-label">Até</label>
+        <input type="date" name="date_to" value="{{ filters.date_to }}" class="form-input">
+      </div>
+      <div>
+        <label class="form-label">Área</label>
+        <select name="area" class="form-input">
+          <option value="">Todas</option>
+          {% for value, label in filter_choices.areas %}
+          <option value="{{ value }}" {% if filters.area == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Setor</label>
+        <select name="location" class="form-input">
+          <option value="">Todos</option>
+          {% for location in filter_choices.locations %}
+          <option value="{{ location.pk }}" {% if filters.location == location.pk|stringformat:"s" %}selected{% endif %}>
+            {{ location.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Prioridade</label>
+        <select name="priority" class="form-input">
+          <option value="">Todas</option>
+          {% for value, label in filter_choices.priorities %}
+          <option value="{{ value }}" {% if filters.priority == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Status</label>
+        <select name="status" class="form-input">
+          <option value="">Todos</option>
+          {% for value, label in filter_choices.statuses %}
+          <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="md:col-span-2 xl:col-span-6 flex flex-wrap gap-3 pt-1">
+        <button type="submit" class="btn-primary">Atualizar painel</button>
+        <a href="{% url 'tickets:reports' %}" class="btn-secondary">Limpar filtros</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+    {% for card in summary_cards %}
+    <article class="report-kpi rounded-2xl p-5 text-white
+      {% if card.tone == 'blue' %}bg-gradient-to-br from-blue-600 to-cyan-500
+      {% elif card.tone == 'emerald' %}bg-gradient-to-br from-emerald-600 to-teal-500
+      {% elif card.tone == 'amber' %}bg-gradient-to-br from-amber-500 to-orange-500
+      {% elif card.tone == 'rose' %}bg-gradient-to-br from-rose-600 to-red-500
+      {% elif card.tone == 'slate' %}bg-gradient-to-br from-slate-700 to-slate-500
+      {% elif card.tone == 'violet' %}bg-gradient-to-br from-violet-600 to-indigo-500
+      {% elif card.tone == 'orange' %}bg-gradient-to-br from-orange-600 to-amber-500
+      {% else %}bg-gradient-to-br from-teal-600 to-cyan-500{% endif %}">
+      <p class="text-sm font-medium text-white/80">{{ card.title }}</p>
+      <p class="mt-4 text-4xl font-bold tracking-tight">{{ card.value }}</p>
+      <p class="mt-3 text-sm text-white/80 max-w-xs">{{ card.caption }}</p>
+    </article>
+    {% endfor %}
+  </section>
+
+  <section class="grid grid-cols-1 gap-6 xl:grid-cols-3">
+    <article class="report-panel p-5 xl:col-span-2">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h3 class="text-lg font-semibold text-slate-900">Volume diário</h3>
+          <p class="text-sm text-slate-500">Comparativo de abertura e conclusão de chamados no período.</p>
+        </div>
+      </div>
+      <div class="chart-wrap mt-5">
+        <canvas id="dailyChart"></canvas>
+      </div>
+    </article>
+
+    <article class="report-panel p-5">
+      <h3 class="text-lg font-semibold text-slate-900">Distribuição por status</h3>
+      <p class="text-sm text-slate-500">Mix atual do pipeline operacional de TI.</p>
+      <div class="chart-wrap mt-5">
+        <canvas id="statusChart"></canvas>
+      </div>
+    </article>
+  </section>
+
+  <section class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+    <article class="report-panel p-5">
+      <h3 class="text-lg font-semibold text-slate-900">Chamados por setor</h3>
+      <p class="text-sm text-slate-500">Top setores com maior volume no período filtrado.</p>
+      <div class="chart-wrap mt-5">
+        <canvas id="locationChart"></canvas>
+      </div>
+    </article>
+
+    <article class="report-panel p-5">
+      <h3 class="text-lg font-semibold text-slate-900">Área x backlog vencido</h3>
+      <p class="text-sm text-slate-500">Volume total por área e quantos chamados já estouraram o prazo.</p>
+      <div class="chart-wrap mt-5">
+        <canvas id="areaChart"></canvas>
+      </div>
+    </article>
+  </section>
+
+  <section class="grid grid-cols-1 gap-6 xl:grid-cols-3">
+    <article class="report-panel p-5 xl:col-span-2">
+      <h3 class="text-lg font-semibold text-slate-900">SLA por prioridade</h3>
+      <p class="text-sm text-slate-500">Concluídos em prazo versus concluídos em atraso por faixa de prioridade.</p>
+      <div class="chart-wrap mt-5">
+        <canvas id="slaPriorityChart"></canvas>
+      </div>
+    </article>
+
+    <article class="report-panel p-5">
+      <h3 class="text-lg font-semibold text-slate-900">Leitura executiva</h3>
+      <div class="mt-4 space-y-4 text-sm text-slate-600">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">SLA</p>
+          <p class="mt-2 text-2xl font-bold text-slate-900">{{ summary_cards.5.value }}</p>
+          <p class="mt-1">{{ summary_cards.5.caption }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Backlog crítico</p>
+          <p class="mt-2 text-2xl font-bold text-slate-900">{{ summary_cards.6.value }}</p>
+          <p class="mt-1">{{ summary_cards.6.caption }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Produtividade</p>
+          <p class="mt-2 text-2xl font-bold text-slate-900">{{ summary_cards.4.value }}</p>
+          <p class="mt-1">{{ summary_cards.4.caption }}</p>
+        </div>
+      </div>
+    </article>
+  </section>
+</div>
+
+{{ daily_chart|json_script:"daily-chart-data" }}
+{{ status_chart|json_script:"status-chart-data" }}
+{{ location_chart|json_script:"location-chart-data" }}
+{{ area_chart|json_script:"area-chart-data" }}
+{{ sla_priority_chart|json_script:"sla-priority-chart-data" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const dailyChartData = JSON.parse(document.getElementById('daily-chart-data').textContent);
+  const statusChartData = JSON.parse(document.getElementById('status-chart-data').textContent);
+  const locationChartData = JSON.parse(document.getElementById('location-chart-data').textContent);
+  const areaChartData = JSON.parse(document.getElementById('area-chart-data').textContent);
+  const slaPriorityChartData = JSON.parse(document.getElementById('sla-priority-chart-data').textContent);
+
+  const baseGridColor = 'rgba(148, 163, 184, 0.18)';
+  const tickColor = '#64748b';
+
+  new Chart(document.getElementById('dailyChart'), {
+    type: 'line',
+    data: {
+      labels: dailyChartData.labels,
+      datasets: [
+        {
+          label: 'Abertos',
+          data: dailyChartData.opened,
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.12)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+        },
+        {
+          label: 'Concluídos',
+          data: dailyChartData.completed,
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16, 185, 129, 0.10)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom' }
+      },
+      scales: {
+        x: { grid: { color: 'transparent' }, ticks: { color: tickColor } },
+        y: { beginAtZero: true, grid: { color: baseGridColor }, ticks: { color: tickColor, precision: 0 } }
+      }
+    }
+  });
+
+  new Chart(document.getElementById('statusChart'), {
+    type: 'doughnut',
+    data: {
+      labels: statusChartData.labels,
+      datasets: [{
+        data: statusChartData.values,
+        backgroundColor: ['#2563eb', '#f59e0b', '#8b5cf6', '#10b981', '#64748b'],
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '62%',
+      plugins: {
+        legend: { position: 'bottom' }
+      }
+    }
+  });
+
+  new Chart(document.getElementById('locationChart'), {
+    type: 'bar',
+    data: {
+      labels: locationChartData.labels,
+      datasets: [{
+        label: 'Chamados',
+        data: locationChartData.values,
+        backgroundColor: '#0f766e',
+        borderRadius: 10,
+        maxBarThickness: 34,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        x: { beginAtZero: true, grid: { color: baseGridColor }, ticks: { color: tickColor, precision: 0 } },
+        y: { grid: { display: false }, ticks: { color: tickColor } }
+      }
+    }
+  });
+
+  new Chart(document.getElementById('areaChart'), {
+    type: 'bar',
+    data: {
+      labels: areaChartData.labels,
+      datasets: [
+        {
+          label: 'Total',
+          data: areaChartData.totals,
+          backgroundColor: '#0ea5e9',
+          borderRadius: 10,
+          maxBarThickness: 42,
+        },
+        {
+          label: 'Vencidos',
+          data: areaChartData.overdue,
+          backgroundColor: '#f97316',
+          borderRadius: 10,
+          maxBarThickness: 42,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom' }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: tickColor } },
+        y: { beginAtZero: true, grid: { color: baseGridColor }, ticks: { color: tickColor, precision: 0 } }
+      }
+    }
+  });
+
+  new Chart(document.getElementById('slaPriorityChart'), {
+    type: 'bar',
+    data: {
+      labels: slaPriorityChartData.labels,
+      datasets: [
+        {
+          label: 'Dentro do SLA',
+          data: slaPriorityChartData.on_time,
+          backgroundColor: '#16a34a',
+          borderRadius: 10,
+          stack: 'sla',
+        },
+        {
+          label: 'Em atraso',
+          data: slaPriorityChartData.late,
+          backgroundColor: '#dc2626',
+          borderRadius: 10,
+          stack: 'sla',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom' }
+      },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { color: tickColor } },
+        y: { stacked: true, beginAtZero: true, grid: { color: baseGridColor }, ticks: { color: tickColor, precision: 0 } }
+      }
+    }
+  });
+</script>
+{% endblock %}

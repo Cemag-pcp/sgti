@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Editar Localização{% else %}Nova Localização{% endif %} — SGTI{% endblock %}
+{% block page_title %}
+<div class="flex items-center gap-2 text-sm">
+  <a href="{% url 'tickets:location_list' %}" class="text-gray-400 hover:text-gray-600">Localizações</a>
+  <span class="text-gray-300">/</span>
+  <span>{% if object %}{{ object.name }}{% else %}Nova{% endif %}</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-lg">
+  <div class="card">
+    <form method="post" class="space-y-5">
+      {% csrf_token %}
+
+      <div>
+        <label class="form-label">Nome *</label>
+        <input type="text" name="name" value="{{ form.name.value|default:'' }}"
+          class="form-input {% if form.name.errors %}border-red-400{% endif %}"
+          placeholder="Ex: Financeiro, RH, TI, Recepção"
+          required autofocus>
+        {% if form.name.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ form.name.errors.0 }}</p>
+        {% endif %}
+      </div>
+
+      <div>
+        <label class="form-label">Descrição</label>
+        <input type="text" name="description" value="{{ form.description.value|default:'' }}"
+          class="form-input"
+          placeholder="Ex: 2º andar, Bloco B (opcional)">
+      </div>
+
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="is_active" id="is_active"
+          {% if form.is_active.value != False %}checked{% endif %}
+          class="rounded border-gray-300 text-blue-600">
+        <label for="is_active" class="text-sm text-gray-700">
+          Localização ativa <span class="text-gray-400">(disponível para seleção nos chamados)</span>
+        </label>
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary">Salvar</button>
+        <a href="{% url 'tickets:location_list' %}" class="btn-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

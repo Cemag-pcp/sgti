@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Editar Usuário{% else %}Novo Usuário{% endif %} — SGTI{% endblock %}
+{% block page_title %}{% if object %}Editar usuário{% else %}Novo usuário{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-lg">
+  <div class="card">
+    <form method="post" class="space-y-5">
+      {% csrf_token %}
+
+      <div>
+        <label class="form-label">Nome completo *</label>
+        <input type="text" name="full_name" value="{{ form.full_name.value|default:'' }}"
+          class="form-input {% if form.full_name.errors %}border-red-400{% endif %}" required>
+        {% if form.full_name.errors %}<p class="mt-1 text-xs text-red-600">{{ form.full_name.errors.0 }}</p>{% endif %}
+      </div>
+
+      <div>
+        <label class="form-label">E-mail *</label>
+        <input type="email" name="email" value="{{ form.email.value|default:'' }}"
+          class="form-input {% if form.email.errors %}border-red-400{% endif %}" required>
+        {% if form.email.errors %}<p class="mt-1 text-xs text-red-600">{{ form.email.errors.0 }}</p>{% endif %}
+      </div>
+
+      <div>
+        <label class="form-label">Função *</label>
+        <select name="role" class="form-input">
+          {% for value, label in form.fields.role.choices %}
+          <option value="{{ value }}" {% if form.role.value == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="form-label">Senha {% if not object %}*{% endif %}</label>
+        <input type="password" name="password" class="form-input"
+          {% if not object %}required{% endif %}
+          placeholder="{% if object %}Deixe em branco para não alterar{% else %}Digite a senha{% endif %}">
+        {% if form.password.errors %}<p class="mt-1 text-xs text-red-600">{{ form.password.errors.0 }}</p>{% endif %}
+      </div>
+
+      {% if object %}
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="is_active" id="is_active"
+          {% if form.is_active.value %}checked{% endif %}
+          class="rounded border-gray-300 text-blue-600">
+        <label for="is_active" class="text-sm text-gray-700">Usuário ativo</label>
+      </div>
+      {% endif %}
+
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary">Salvar</button>
+        <a href="{% url 'accounts:user_list' %}" class="btn-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

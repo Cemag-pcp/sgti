@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}{{ requester.full_name }} — SGTI{% endblock %}
+{% block page_title %}
+<div class="flex items-center gap-2 text-sm">
+  <a href="{% url 'accounts:requester_list' %}" class="text-gray-400 hover:text-gray-600">Solicitantes</a>
+  <span class="text-gray-300">/</span>
+  <span>{{ requester.full_name }}</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl space-y-6">
+  <div class="card">
+    <dl class="grid grid-cols-2 gap-4 text-sm">
+      <div>
+        <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Matrícula</dt>
+        <dd class="font-mono font-medium text-gray-800">{{ requester.matricula }}</dd>
+      </div>
+      <div>
+        <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Nome</dt>
+        <dd class="font-medium text-gray-800">{{ requester.full_name }}</dd>
+      </div>
+      <div>
+        <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">E-mail</dt>
+        <dd class="text-gray-700">{{ requester.email|default:"—" }}</dd>
+      </div>
+      <div>
+        <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">Telefone</dt>
+        <dd class="text-gray-700">{{ requester.phone|default:"—" }}</dd>
+      </div>
+      <div>
+        <dt class="text-gray-400 text-xs uppercase tracking-wide mb-1">WhatsApp</dt>
+        <dd class="text-gray-700">{{ requester.whatsapp_phone|default:"—" }}</dd>
+      </div>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h3 class="font-semibold text-gray-800 mb-4">Chamados ({{ requester.tickets.count }})</h3>
+    {% if requester.tickets.all %}
+    <div class="space-y-2">
+      {% for ticket in requester.tickets.all|slice:":10" %}
+      <a href="{% url 'tickets:detail' ticket.pk %}"
+        class="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+        <div>
+          <span class="font-mono text-xs text-gray-400">{{ ticket.ticket_number }}</span>
+          <p class="text-sm font-medium text-gray-800">{{ ticket.title }}</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="badge {{ ticket.status_class }} text-xs">{{ ticket.get_status_display }}</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-gray-400 text-sm">Nenhum chamado.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

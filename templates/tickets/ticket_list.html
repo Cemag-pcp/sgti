@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Chamados - SGTI{% endblock %}
+
+{% block page_title %}Chamados{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'tickets:submit' %}" class="btn-primary">
+  <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+  </svg>
+  Novo chamado
+</a>
+{% endblock %}
+
+{% block content %}
+
+<form method="get" class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-5 flex flex-wrap gap-3 items-end">
+  <div class="flex-1 min-w-48">
+    <label class="form-label">Buscar</label>
+    <input type="text" name="q" value="{{ filters.q|default:'' }}" placeholder="Numero, titulo..."
+      class="form-input">
+  </div>
+  <div>
+    <label class="form-label">Status</label>
+    <select name="status" class="form-input">
+      <option value="">Todos</option>
+      {% for value, label in status_choices %}
+      <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="form-label">Prioridade</label>
+    <select name="priority" class="form-input">
+      <option value="">Todas</option>
+      {% for value, label in priority_choices %}
+      <option value="{{ value }}" {% if filters.priority == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if request.user.is_supervisor %}
+  <div>
+    <label class="form-label">Atribuido</label>
+    <select name="assigned" class="form-input">
+      <option value="">Todos</option>
+      <option value="unassigned" {% if filters.assigned == 'unassigned' %}selected{% endif %}>Nao atribuidos</option>
+      <option value="me" {% if filters.assigned == 'me' %}selected{% endif %}>Para mim</option>
+    </select>
+  </div>
+  {% endif %}
+  <button type="submit" class="btn-primary">Filtrar</button>
+  {% if filters %}
+  <a href="{% url 'tickets:list' %}" class="btn-secondary">Limpar</a>
+  {% endif %}
+</form>
+
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+  {% if tickets %}
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-gray-50 border-b border-gray-100">
+        <tr>
+          <th class="table-th">#</th>
+          <th class="table-th">Titulo</th>
+          <th class="table-th">Solicitante</th>
+          <th class="table-th">Área</th>
+          <th class="table-th">Setor</th>
+          <th class="table-th">Prioridade</th>
+          <th class="table-th">Status</th>
+          <th class="table-th">Prazo</th>
+          <th class="table-th">Atribuido a</th>
+          <th class="table-th">Aberto em</th>
+          <th class="table-th"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        {% for ticket in tickets %}
+        <tr class="hover:bg-gray-50 transition-colors">
+          <td class="table-td font-mono text-xs text-gray-500">{{ ticket.ticket_number }}</td>
+          <td class="table-td font-medium max-w-xs truncate">{{ ticket.title }}</td>
+          <td class="table-td text-gray-500">{{ ticket.requester.full_name|default:"-" }}</td>
+          <td class="table-td text-gray-500">{{ ticket.get_area_display|default:"-" }}</td>
+          <td class="table-td text-gray-500">{{ ticket.location.name|default:"-" }}</td>
+          <td class="table-td">
+            <span class="badge {{ ticket.priority_class }}">{{ ticket.get_priority_display }}</span>
+          </td>
+          <td class="table-td">
+            <span class="badge {{ ticket.status_class }}">{{ ticket.get_status_display }}</span>
+          </td>
+          <td class="table-td">
+            {% if ticket.sla_flag_label %}
+            <span class="badge {{ ticket.sla_flag_class }}">{{ ticket.sla_flag_label }}</span>
+            {% else %}
+            <span class="text-gray-400 text-xs">-</span>
+            {% endif %}
+          </td>
+          <td class="table-td text-gray-500">{{ ticket.assigned_to.full_name|default:"-" }}</td>
+          <td class="table-td text-gray-400 text-xs">{{ ticket.created_at|date:"d/m/Y H:i" }}</td>
+          <td class="table-td">
+            <a href="{% url 'tickets:detail' ticket.pk %}" class="text-blue-600 hover:text-blue-700 text-xs font-medium">
+              Ver ->
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  {% else %}
+  <div class="text-center py-16">
+    <svg class="w-12 h-12 text-gray-200 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+    </svg>
+    <p class="text-gray-400 font-medium">Nenhum chamado encontrado</p>
+    <p class="text-gray-300 text-sm mt-1">Ajuste os filtros ou <a href="{% url 'tickets:submit' %}" class="text-blue-500">abra um novo chamado</a></p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

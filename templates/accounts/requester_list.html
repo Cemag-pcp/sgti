@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Solicitantes — SGTI{% endblock %}
+{% block page_title %}Solicitantes{% endblock %}
+
+{% block header_actions %}
+{% if request.user.is_supervisor %}
+<button onclick="openModal()" class="btn-primary">
+  <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+  </svg>
+  Novo solicitante
+</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<!-- Busca -->
+<form method="get" class="mb-4 flex gap-2">
+  <input type="text" name="q" value="{{ search|default:'' }}"
+    placeholder="Buscar por nome ou matrícula..."
+    class="form-input flex-1 max-w-sm">
+  <button type="submit" class="btn-secondary">Buscar</button>
+  {% if search %}
+  <a href="{% url 'accounts:requester_list' %}" class="btn-secondary">Limpar</a>
+  {% endif %}
+</form>
+
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+  {% if requesters %}
+  <table class="w-full">
+    <thead class="bg-gray-50 border-b border-gray-100">
+      <tr>
+        <th class="table-th">Matrícula</th>
+        <th class="table-th">Nome</th>
+        <th class="table-th">E-mail</th>
+        <th class="table-th">Telefone</th>
+        <th class="table-th">WhatsApp</th>
+        <th class="table-th text-center">Chamados</th>
+        <th class="table-th"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-50">
+      {% for r in requesters %}
+      <tr class="hover:bg-gray-50 transition-colors">
+        <td class="table-td font-mono text-xs text-gray-500">{{ r.matricula }}</td>
+        <td class="table-td font-medium text-gray-900">{{ r.full_name }}</td>
+        <td class="table-td text-gray-500">{{ r.email|default:"—" }}</td>
+        <td class="table-td text-gray-500">{{ r.phone|default:"—" }}</td>
+        <td class="table-td text-gray-500">{{ r.whatsapp_phone|default:"—" }}</td>
+        <td class="table-td text-center text-gray-500">{{ r.tickets.count }}</td>
+        <td class="table-td text-right space-x-3">
+          {% if request.user.is_supervisor %}
+          <button
+            onclick="openModal({
+              pk: {{ r.pk }},
+              matricula: '{{ r.matricula|escapejs }}',
+              full_name: '{{ r.full_name|escapejs }}',
+              email: '{{ r.email|escapejs }}',
+              phone: '{{ r.phone|escapejs }}',
+              whatsapp_phone: '{{ r.whatsapp_phone|escapejs }}'
+            })"
+            class="text-blue-600 hover:text-blue-700 text-xs font-medium">
+            Editar
+          </button>
+          <button onclick="openDeleteModal({{ r.pk }}, '{{ r.full_name|escapejs }}')"
+            class="text-red-500 hover:text-red-600 text-xs font-medium">
+            Remover
+          </button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="text-center py-16">
+    <svg class="w-12 h-12 text-gray-200 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+    </svg>
+    <p class="text-gray-400 font-medium">Nenhum solicitante encontrado</p>
+    {% if request.user.is_supervisor %}
+    <p class="text-gray-300 text-sm mt-1">
+      <button onclick="openModal()" class="text-blue-500">Cadastre o primeiro solicitante</button>
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Modal Criar / Editar ──────────────────────────────────────────────── -->
+<div id="requester-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md">
+
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <h2 id="modal-title" class="font-semibold text-gray-900">Novo solicitante</h2>
+      <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <form id="requester-form" method="post" action="{% url 'accounts:requester_create' %}" class="px-6 py-5 space-y-4">
+      {% csrf_token %}
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="form-label">Matrícula *</label>
+          <input type="text" name="matricula" id="field-matricula"
+            value="{{ requester_form.matricula.value|default:'' }}"
+            class="form-input {% if requester_form.matricula.errors %}border-red-400{% endif %}"
+            placeholder="Ex: 12345" required>
+          {% if requester_form.matricula.errors %}
+          <p class="mt-1 text-xs text-red-600">{{ requester_form.matricula.errors.0 }}</p>
+          {% endif %}
+        </div>
+        <div>
+          <label class="form-label">Nome completo *</label>
+          <input type="text" name="full_name" id="field-full_name"
+            value="{{ requester_form.full_name.value|default:'' }}"
+            class="form-input {% if requester_form.full_name.errors %}border-red-400{% endif %}"
+            placeholder="Nome completo" required>
+          {% if requester_form.full_name.errors %}
+          <p class="mt-1 text-xs text-red-600">{{ requester_form.full_name.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div>
+        <label class="form-label">E-mail</label>
+        <input type="email" name="email" id="field-email"
+          value="{{ requester_form.email.value|default:'' }}"
+          class="form-input {% if requester_form.email.errors %}border-red-400{% endif %}"
+          placeholder="email@empresa.com">
+        {% if requester_form.email.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ requester_form.email.errors.0 }}</p>
+        {% endif %}
+      </div>
+
+      <div>
+        <label class="form-label">Telefone</label>
+        <input type="text" name="phone" id="field-phone"
+          value="{{ requester_form.phone.value|default:'' }}"
+          class="form-input" placeholder="(00) 00000-0000">
+      </div>
+
+      <div>
+        <label class="form-label">WhatsApp</label>
+        <input type="text" name="whatsapp_phone" id="field-whatsapp_phone"
+          value="{{ requester_form.whatsapp_phone.value|default:'' }}"
+          class="form-input" placeholder="5511999999999">
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary flex-1 justify-center">Salvar</button>
+        <button type="button" onclick="closeModal()" class="btn-secondary flex-1 justify-center">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Modal Deletar ─────────────────────────────────────────────────────── -->
+<div id="delete-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+    <div class="px-6 py-5">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="font-semibold text-gray-900">Remover solicitante</h3>
+          <p class="text-sm text-gray-500">Os chamados vinculados não serão excluídos.</p>
+        </div>
+      </div>
+      <p class="text-sm text-gray-600 mb-5">
+        Remover <strong id="delete-name"></strong>?
+      </p>
+      <form id="delete-form" method="post">
+        {% csrf_token %}
+        <div class="flex gap-3">
+          <button type="submit" class="btn-danger flex-1 justify-center">Remover</button>
+          <button type="button" onclick="closeDeleteModal()" class="btn-secondary flex-1 justify-center">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const createUrl = "{% url 'accounts:requester_create' %}";
+
+  function openModal(data) {
+    const form = document.getElementById('requester-form');
+    const title = document.getElementById('modal-title');
+
+    if (data) {
+      title.textContent = 'Editar solicitante';
+      form.action = `/accounts/requesters/${data.pk}/edit/`;
+      document.getElementById('field-matricula').value = data.matricula;
+      document.getElementById('field-full_name').value = data.full_name;
+      document.getElementById('field-email').value = data.email;
+      document.getElementById('field-phone').value = data.phone;
+      document.getElementById('field-whatsapp_phone').value = data.whatsapp_phone;
+    } else {
+      title.textContent = 'Novo solicitante';
+      form.action = createUrl;
+      form.reset();
+    }
+
+    document.getElementById('requester-modal').classList.remove('hidden');
+  }
+
+  function closeModal() {
+    document.getElementById('requester-modal').classList.add('hidden');
+  }
+
+  function openDeleteModal(pk, name) {
+    document.getElementById('delete-name').textContent = name;
+    document.getElementById('delete-form').action = `/accounts/requesters/${pk}/delete/`;
+    document.getElementById('delete-modal').classList.remove('hidden');
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('delete-modal').classList.add('hidden');
+  }
+
+  {% if open_modal %}
+  document.addEventListener('DOMContentLoaded', () => openModal({% if edit_pk %}{ pk: {{ edit_pk }}, matricula: '', full_name: '', email: '', phone: '', whatsapp_phone: '' }{% else %}null{% endif %}));
+  {% endif %}
+</script>
+{% endblock %}

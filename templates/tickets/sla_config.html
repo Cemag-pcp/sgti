@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Configuração de SLA — SGTI{% endblock %}
+{% block page_title %}Configuração de SLA{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+
+  <p class="text-sm text-gray-500 mb-6">
+    Defina o prazo de resolução em horas para cada prioridade. Ao abrir um chamado,
+    o prazo é calculado automaticamente com base na prioridade selecionada.
+  </p>
+
+  <form method="post">
+    {% csrf_token %}
+
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden mb-6">
+      <table class="w-full">
+        <thead class="bg-gray-50 border-b border-gray-100">
+          <tr>
+            <th class="table-th">Prioridade</th>
+            <th class="table-th">Prazo de resolução</th>
+            <th class="table-th text-center">Equivalente</th>
+            <th class="table-th text-center">Ativo</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50">
+
+          {% for sla, form in sla_forms %}
+          {% with priority=sla.priority %}
+          <tr>
+            <td class="table-td">
+              <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full flex-shrink-0
+                  {% if priority == 'CRITICAL' %}bg-red-500
+                  {% elif priority == 'HIGH' %}bg-orange-400
+                  {% elif priority == 'MEDIUM' %}bg-yellow-400
+                  {% else %}bg-green-400{% endif %}">
+                </span>
+                <span class="font-medium text-gray-800">{{ sla.get_priority_display }}</span>
+              </div>
+            </td>
+            <td class="table-td">
+              <div class="flex items-center gap-2">
+                {{ form.resolution_hours }}
+                <span class="text-sm text-gray-400">horas</span>
+                {% if form.resolution_hours.errors %}
+                <span class="text-xs text-red-600">{{ form.resolution_hours.errors.0 }}</span>
+                {% endif %}
+              </div>
+            </td>
+            <td class="table-td text-center">
+              <span class="text-sm text-gray-500" id="equiv-{{ priority }}">
+                {% if sla.resolution_hours %}{{ sla.resolution_display }}{% else %}—{% endif %}
+              </span>
+            </td>
+            <td class="table-td text-center">
+              {{ form.is_active }}
+            </td>
+          </tr>
+          {% endwith %}
+          {% endfor %}
+
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Legenda -->
+    <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6 text-sm text-blue-700">
+      <p class="font-medium mb-2">Como funciona</p>
+      <ul class="space-y-1 text-blue-600">
+        <li>• O prazo é calculado em <strong>horas corridas</strong> a partir da abertura do chamado.</li>
+        <li>• Se o SLA da prioridade estiver <strong>inativo</strong>, nenhum prazo será aplicado automaticamente.</li>
+        <li>• O prazo pode ser ajustado manualmente na edição do chamado.</li>
+      </ul>
+    </div>
+
+    <button type="submit" class="btn-primary">Salvar configurações</button>
+  </form>
+
+</div>
+{% endblock %}

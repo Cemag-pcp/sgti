@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}Usuários — SGTI{% endblock %}
+{% block page_title %}Usuários do sistema{% endblock %}
+
+{% block header_actions %}
+<button onclick="openUserModal()" class="btn-primary">
+  <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+  </svg>
+  Novo usuário
+</button>
+{% endblock %}
+
+{% block content %}
+
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+  {% if users %}
+  <table class="w-full">
+    <thead class="bg-gray-50 border-b border-gray-100">
+      <tr>
+        <th class="table-th">Nome</th>
+        <th class="table-th">E-mail</th>
+        <th class="table-th">Função</th>
+        <th class="table-th text-center">Status</th>
+        <th class="table-th"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-50">
+      {% for u in users %}
+      <tr class="hover:bg-gray-50 transition-colors">
+        <td class="table-td font-medium text-gray-900">{{ u.full_name }}</td>
+        <td class="table-td text-gray-500">{{ u.email }}</td>
+        <td class="table-td">
+          <span class="badge {% if u.role == 'SUPERVISOR' %}bg-blue-100 text-blue-800{% else %}bg-gray-100 text-gray-700{% endif %}">
+            {{ u.get_role_display }}
+          </span>
+        </td>
+        <td class="table-td text-center">
+          {% if u.is_active %}
+          <span class="badge bg-green-100 text-green-700">Ativo</span>
+          {% else %}
+          <span class="badge bg-gray-100 text-gray-500">Inativo</span>
+          {% endif %}
+        </td>
+        <td class="table-td text-right space-x-3">
+          <button
+            onclick="openUserModal({
+              pk: {{ u.pk }},
+              full_name: '{{ u.full_name|escapejs }}',
+              email: '{{ u.email|escapejs }}',
+              role: '{{ u.role }}',
+              is_active: {{ u.is_active|yesno:'true,false' }}
+            })"
+            class="text-blue-600 hover:text-blue-700 text-xs font-medium">
+            Editar
+          </button>
+          {% if u != request.user %}
+          <button onclick="openDeleteModal({{ u.pk }}, '{{ u.full_name|escapejs }}')"
+            class="text-red-500 hover:text-red-600 text-xs font-medium">
+            Remover
+          </button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="text-center py-16">
+    <svg class="w-12 h-12 text-gray-200 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+    </svg>
+    <p class="text-gray-400 font-medium">Nenhum usuário cadastrado</p>
+    <p class="text-gray-300 text-sm mt-1">
+      <button onclick="openUserModal()" class="text-blue-500">Cadastre o primeiro usuário</button>
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Modal Criar / Editar ──────────────────────────────────────────────── -->
+<div id="user-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md">
+
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <h2 id="modal-title" class="font-semibold text-gray-900">Novo usuário</h2>
+      <button onclick="closeUserModal()" class="text-gray-400 hover:text-gray-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <form id="user-form" method="post" action="{% url 'accounts:user_create' %}" class="px-6 py-5 space-y-4">
+      {% csrf_token %}
+
+      <div>
+        <label class="form-label">Nome completo *</label>
+        <input type="text" name="full_name" id="field-full_name"
+          value="{{ user_form.full_name.value|default:'' }}"
+          class="form-input {% if user_form.full_name.errors %}border-red-400{% endif %}" required>
+        {% if user_form.full_name.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ user_form.full_name.errors.0 }}</p>
+        {% endif %}
+      </div>
+
+      <div>
+        <label class="form-label">E-mail *</label>
+        <input type="email" name="email" id="field-email"
+          value="{{ user_form.email.value|default:'' }}"
+          class="form-input {% if user_form.email.errors %}border-red-400{% endif %}" required>
+        {% if user_form.email.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ user_form.email.errors.0 }}</p>
+        {% endif %}
+      </div>
+
+      <div>
+        <label class="form-label">Função *</label>
+        <select name="role" id="field-role" class="form-input">
+          {% for value, label in user_form.fields.role.choices %}
+          <option value="{{ value }}" {% if user_form.role.value == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="form-label">
+          Senha <span id="password-hint" class="text-gray-400 font-normal text-xs">(obrigatória no cadastro)</span>
+        </label>
+        <input type="password" name="password" id="field-password" class="form-input"
+          placeholder="••••••••">
+        {% if user_form.password.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ user_form.password.errors.0 }}</p>
+        {% endif %}
+      </div>
+
+      <div id="active-field" class="hidden flex items-center gap-2">
+        <input type="checkbox" name="is_active" id="field-is_active"
+          class="rounded border-gray-300 text-blue-600">
+        <label for="field-is_active" class="text-sm text-gray-700">Usuário ativo</label>
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary flex-1 justify-center">Salvar</button>
+        <button type="button" onclick="closeUserModal()" class="btn-secondary flex-1 justify-center">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Modal Deletar ─────────────────────────────────────────────────────── -->
+<div id="delete-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+    <div class="px-6 py-5">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="font-semibold text-gray-900">Remover usuário</h3>
+          <p class="text-sm text-gray-500">Esta ação não pode ser desfeita.</p>
+        </div>
+      </div>
+      <p class="text-sm text-gray-600 mb-5">
+        Remover <strong id="delete-name"></strong>?
+      </p>
+      <form id="delete-form" method="post">
+        {% csrf_token %}
+        <div class="flex gap-3">
+          <button type="submit" class="btn-danger flex-1 justify-center">Remover</button>
+          <button type="button" onclick="closeDeleteModal()" class="btn-secondary flex-1 justify-center">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const createUrl = "{% url 'accounts:user_create' %}";
+
+  function openUserModal(data) {
+    const form = document.getElementById('user-form');
+    const title = document.getElementById('modal-title');
+    const hint = document.getElementById('password-hint');
+    const activeField = document.getElementById('active-field');
+
+    if (data) {
+      title.textContent = 'Editar usuário';
+      form.action = `/accounts/users/${data.pk}/edit/`;
+      hint.textContent = '(deixe em branco para não alterar)';
+      document.getElementById('field-full_name').value = data.full_name;
+      document.getElementById('field-email').value = data.email;
+      document.getElementById('field-role').value = data.role;
+      document.getElementById('field-password').value = '';
+      document.getElementById('field-is_active').checked = data.is_active;
+      activeField.classList.remove('hidden');
+    } else {
+      title.textContent = 'Novo usuário';
+      form.action = createUrl;
+      hint.textContent = '(obrigatória no cadastro)';
+      form.reset();
+      activeField.classList.add('hidden');
+    }
+
+    document.getElementById('user-modal').classList.remove('hidden');
+  }
+
+  function closeUserModal() {
+    document.getElementById('user-modal').classList.add('hidden');
+  }
+
+  function openDeleteModal(pk, name) {
+    document.getElementById('delete-name').textContent = name;
+    document.getElementById('delete-form').action = `/accounts/users/${pk}/delete/`;
+    document.getElementById('delete-modal').classList.remove('hidden');
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('delete-modal').classList.add('hidden');
+  }
+
+  // Re-abre o modal se voltou com erro de validação
+  {% if open_modal %}
+  document.addEventListener('DOMContentLoaded', () => openUserModal({% if edit_pk %}{ pk: {{ edit_pk }}, full_name: '', email: '', role: '', is_active: true }{% else %}null{% endif %}));
+  {% endif %}
+</script>
+{% endblock %}
