@@ -116,9 +116,9 @@ class WebPushConfigTests(SimpleTestCase):
     def test_get_vapid_private_key_normalizes_inline_pem(self):
         normalized = get_vapid_private_key()
 
-        self.assertTrue(normalized.startswith('-----BEGIN PRIVATE KEY-----\n'))
-        self.assertIn('\n-----END PRIVATE KEY-----', normalized)
-        self.assertNotIn('-----BEGIN PRIVATE KEY-----MIGH', normalized)
+        self.assertTrue(normalized.startswith('MIGHAgEAMBMG'))
+        self.assertNotIn('PRIVATE KEY', normalized)
+        self.assertNotIn('\n', normalized)
 
     def test_get_vapid_private_key_reads_pem_file_path(self):
         pem_content = '\n'.join(
@@ -136,7 +136,14 @@ class WebPushConfigTests(SimpleTestCase):
             pem_path.write_text(pem_content, encoding='utf-8')
 
             with override_settings(WEBPUSH_VAPID_PRIVATE_KEY=str(pem_path)):
-                self.assertEqual(get_vapid_private_key(), pem_content)
+                self.assertEqual(
+                    get_vapid_private_key(),
+                    (
+                        'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgifpgeZDkesBeBJ7D'
+                        'JTyGmhyYF0OSzZH7EoZPwhu21tOhRANCAAQB8FCgvdMSK2Q0RwutYC6SesTFOnKk'
+                        '6mbTDqZsXYYq1O5FQNi1pv0I5wkuMuAmlI1V61zcT8l17xgWuUNeiaCv'
+                    ),
+                )
 
 
 class TicketCreateApiTests(TestCase):

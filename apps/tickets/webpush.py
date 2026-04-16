@@ -26,15 +26,7 @@ def get_vapid_private_key():
     if '-----BEGIN PRIVATE KEY-----' in value and '-----END PRIVATE KEY-----' in value:
         body = value.replace('-----BEGIN PRIVATE KEY-----', '')
         body = body.replace('-----END PRIVATE KEY-----', '')
-        body = ''.join(body.split())
-        chunks = [body[i:i + 64] for i in range(0, len(body), 64)]
-        return '\n'.join(
-            [
-                '-----BEGIN PRIVATE KEY-----',
-                *chunks,
-                '-----END PRIVATE KEY-----',
-            ]
-        )
+        return ''.join(body.split())
 
     return value
 
