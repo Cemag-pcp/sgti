@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 
 from django.conf import settings
 from django.utils import timezone
@@ -10,6 +11,32 @@ from .models import BrowserPushSubscription
 
 
 logger = logging.getLogger(__name__)
+
+
+def get_vapid_private_key():
+    value = (settings.WEBPUSH_VAPID_PRIVATE_KEY or '').strip()
+    if not value:
+        return ''
+
+    # Local development may point to a PEM file instead of storing the full key in env.
+    candidate_path = Path(value)
+    if candidate_path.exists() and candidate_path.is_file():
+        value = candidate_path.read_text(encoding='utf-8').strip()
+
+    if '-----BEGIN PRIVATE KEY-----' in value and '-----END PRIVATE KEY-----' in value:
+        body = value.replace('-----BEGIN PRIVATE KEY-----', '')
+        body = body.replace('-----END PRIVATE KEY-----', '')
+        body = ''.join(body.split())
+        chunks = [body[i:i + 64] for i in range(0, len(body), 64)]
+        return '\n'.join(
+            [
+                '-----BEGIN PRIVATE KEY-----',
+                *chunks,
+                '-----END PRIVATE KEY-----',
+            ]
+        )
+
+    return value
 
 
 def webpush_is_configured():
@@ -29,6 +56,8 @@ def build_ticket_push_payload(ticket):
 def send_ticket_push_notification(ticket):
     if not webpush_is_configured():
         return 0
+
+    vapid_private_key = get_vapid_private_key()
 
     subscriptions = BrowserPushSubscription.objects.filter(
         is_active=True,
@@ -50,7 +79,7 @@ def send_ticket_push_notification(ticket):
                     },
                 },
                 data=payload,
-                vapid_private_key=settings.WEBPUSH_VAPID_PRIVATE_KEY,
+                vapid_private_key=vapid_private_key,
                 vapid_claims={'sub': f'mailto:{settings.WEBPUSH_VAPID_ADMIN_EMAIL}'},
             )
             subscription.last_success_at = timezone.now()

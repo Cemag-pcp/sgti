@@ -1,6 +1,8 @@
 import json
 from unittest.mock import patch
 from django.db import transaction
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -13,6 +15,7 @@ from apps.tickets.whatsapp import (
     build_whatsapp_headers,
     send_whatsapp_text_message,
 )
+from apps.tickets.webpush import get_vapid_private_key
 from apps.tickets.whatsapp_bot import process_incoming_whatsapp_message
 from datetime import timedelta
 
@@ -98,6 +101,42 @@ class WhatsAppWebhookTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertJSONEqual(response.content, {'status': 'invalid_json'})
+
+
+class WebPushConfigTests(SimpleTestCase):
+    @override_settings(
+        WEBPUSH_VAPID_PRIVATE_KEY=(
+            '-----BEGIN PRIVATE KEY-----'
+            'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgifpgeZDkesBeBJ7D'
+            'JTyGmhyYF0OSzZH7EoZPwhu21tOhRANCAAQB8FCgvdMSK2Q0RwutYC6SesTFOnKk'
+            '6mbTDqZsXYYq1O5FQNi1pv0I5wkuMuAmlI1V61zcT8l17xgWuUNeiaCv'
+            '-----END PRIVATE KEY-----'
+        )
+    )
+    def test_get_vapid_private_key_normalizes_inline_pem(self):
+        normalized = get_vapid_private_key()
+
+        self.assertTrue(normalized.startswith('-----BEGIN PRIVATE KEY-----\n'))
+        self.assertIn('\n-----END PRIVATE KEY-----', normalized)
+        self.assertNotIn('-----BEGIN PRIVATE KEY-----MIGH', normalized)
+
+    def test_get_vapid_private_key_reads_pem_file_path(self):
+        pem_content = '\n'.join(
+            [
+                '-----BEGIN PRIVATE KEY-----',
+                'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgifpgeZDkesBeBJ7D',
+                'JTyGmhyYF0OSzZH7EoZPwhu21tOhRANCAAQB8FCgvdMSK2Q0RwutYC6SesTFOnKk',
+                '6mbTDqZsXYYq1O5FQNi1pv0I5wkuMuAmlI1V61zcT8l17xgWuUNeiaCv',
+                '-----END PRIVATE KEY-----',
+            ]
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            pem_path = Path(temp_dir) / 'webpush.pem'
+            pem_path.write_text(pem_content, encoding='utf-8')
+
+            with override_settings(WEBPUSH_VAPID_PRIVATE_KEY=str(pem_path)):
+                self.assertEqual(get_vapid_private_key(), pem_content)
 
 
 class TicketCreateApiTests(TestCase):
