@@ -158,6 +158,27 @@ class TicketCreateApiTests(TestCase):
         self.assertEqual(requester.phone, '1133334444')
         self.assertEqual(requester.whatsapp_phone, '5511999999999')
 
+    def test_api_accepts_device_and_location_alias_fields(self):
+        payload = {
+            'matricula': '54321',
+            'requester_name': 'Joao Souza',
+            'title': 'Problema no desktop',
+            'description': 'O equipamento nao inicializa corretamente.',
+            'location': str(self.location.id),
+            'device': str(self.device.id),
+        }
+
+        response = self.client.post(
+            reverse('tickets:api_open'),
+            data=json.dumps(payload),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        ticket = Ticket.objects.get(pk=response.json()['ticket']['id'])
+        self.assertEqual(ticket.location, self.location)
+        self.assertEqual(ticket.device, self.device)
+
     def test_api_returns_validation_errors(self):
         response = self.client.post(
             reverse('tickets:api_open'),
@@ -167,6 +188,39 @@ class TicketCreateApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()['error'], 'validation_error')
+
+    def test_api_rejects_invalid_json_payload(self):
+        response = self.client.post(
+            reverse('tickets:api_open'),
+            data='{"matricula": ',
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {'error': 'invalid_json'})
+
+    def test_api_returns_validation_error_when_asset_tag_is_not_found(self):
+        payload = {
+            'matricula': '12345',
+            'requester_name': 'Maria Silva',
+            'title': 'Notebook sem ligar',
+            'description': 'O equipamento nao liga desde cedo.',
+            'location_id': self.location.id,
+            'device_id': self.device.id,
+            'asset_tag': 'AT-9999',
+        }
+
+        response = self.client.post(
+            reverse('tickets:api_open'),
+            data=json.dumps(payload),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
+        self.assertEqual(body['error'], 'validation_error')
+        self.assertIn('asset_tag', body['errors'])
+        self.assertFalse(Ticket.objects.filter(title='Notebook sem ligar').exists())
 
 
 class TicketNotificationsPollTests(TestCase):
