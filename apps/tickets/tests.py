@@ -16,6 +16,7 @@ from apps.tickets.whatsapp import (
     send_whatsapp_text_message,
 )
 from apps.tickets.webpush import get_vapid_private_key
+from apps.tickets.webpush import build_ticket_push_payload
 from apps.tickets.whatsapp_bot import process_incoming_whatsapp_message
 from datetime import timedelta
 
@@ -144,6 +145,19 @@ class WebPushConfigTests(SimpleTestCase):
                         '6mbTDqZsXYYq1O5FQNi1pv0I5wkuMuAmlI1V61zcT8l17xgWuUNeiaCv'
                     ),
                 )
+
+    @override_settings(APP_BASE_URL='https://sgti.onrender.com')
+    def test_build_ticket_push_payload_uses_absolute_app_base_url(self):
+        class DummyTicket:
+            id = 99
+            ticket_number = 'TI-2026-00099'
+            title = 'Teste'
+            priority = 'HIGH'
+            PRIORITY_CHOICES = [('HIGH', 'Alta')]
+
+        payload = build_ticket_push_payload(DummyTicket())
+
+        self.assertEqual(payload['url'], 'https://sgti.onrender.com/tickets/99/')
 
 
 class TicketCreateApiTests(TestCase):

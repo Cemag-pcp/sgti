@@ -37,11 +37,12 @@ def webpush_is_configured():
 
 def build_ticket_push_payload(ticket):
     priority_label = dict(ticket.PRIORITY_CHOICES).get(ticket.priority, ticket.priority)
+    base_url = settings.APP_BASE_URL.rstrip('/')
     return {
         'title': f'Novo chamado - {ticket.ticket_number}',
         'body': f'{ticket.title}\nPrioridade: {priority_label}',
         'tag': f'ticket-{ticket.id}',
-        'url': f'/tickets/{ticket.id}/',
+        'url': f'{base_url}/tickets/{ticket.id}/',
     }
 
 

@@ -112,3 +112,4 @@ WHATSAPP_MESSAGES_URL = config(
 WEBPUSH_VAPID_PUBLIC_KEY = config('WEBPUSH_VAPID_PUBLIC_KEY', default='')
 WEBPUSH_VAPID_PRIVATE_KEY = config('WEBPUSH_VAPID_PRIVATE_KEY', default='')
 WEBPUSH_VAPID_ADMIN_EMAIL = config('WEBPUSH_VAPID_ADMIN_EMAIL', default='admin@localhost')
+APP_BASE_URL = config('APP_BASE_URL', default='http://localhost:8000')
