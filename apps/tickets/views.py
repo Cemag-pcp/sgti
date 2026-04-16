@@ -44,6 +44,49 @@ class RequesterLookupView(View):
             return JsonResponse({'found': False})
 
 
+class LastTicketByMatriculaApiView(View):
+    http_method_names = ['get']
+
+    def get(self, request, *args, **kwargs):
+        matricula = request.GET.get('matricula', '').strip()
+        if not matricula:
+            return JsonResponse({'found': False, 'error': 'missing_matricula'}, status=400)
+
+        ticket = (
+            Ticket.objects.select_related('requester', 'location', 'device')
+            .filter(requester__matricula=matricula)
+            .order_by('-created_at')
+            .first()
+        )
+        if ticket is None:
+            return JsonResponse({'found': False})
+
+        return JsonResponse(
+            {
+                'found': True,
+                'ticket': {
+                    'id': ticket.id,
+                    'ticket_number': ticket.ticket_number,
+                    'title': ticket.title,
+                    'description': ticket.description,
+                    'status': ticket.status,
+                    'priority': ticket.priority,
+                    'category': ticket.category,
+                    'created_at': ticket.created_at.isoformat(),
+                },
+                'location': (
+                    {
+                        'id': ticket.location_id,
+                        'name': ticket.location.name,
+                        'description': ticket.location.description,
+                    }
+                    if ticket.location
+                    else None
+                ),
+            }
+        )
+
+
 class DeviceListApiView(View):
     http_method_names = ['get']
 

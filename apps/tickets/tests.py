@@ -305,6 +305,61 @@ class TicketCreateApiTests(TestCase):
         self.assertEqual(response.json()['detail'], 'simulated failure')
 
 
+class LastTicketByMatriculaApiTests(TestCase):
+    def setUp(self):
+        self.location = Location.objects.create(name='PCP', description='Planejamento')
+        self.device = Device.objects.create(name='Notebook')
+        self.requester = RequesterProfile.objects.create(
+            matricula='4357',
+            full_name='Teste Usuario',
+        )
+
+    def test_api_returns_not_found_when_requester_has_no_tickets(self):
+        response = self.client.get(
+            reverse('tickets:api_last_ticket'),
+            {'matricula': '9999'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'found': False})
+
+    def test_api_returns_last_ticket_and_location_data(self):
+        older_ticket = Ticket.objects.create(
+            requester=self.requester,
+            title='Chamado antigo',
+            description='Descricao antiga',
+            location=self.location,
+            device=self.device,
+            priority=Ticket.MEDIUM,
+            category=Ticket.SOFTWARE,
+        )
+        latest_ticket = Ticket.objects.create(
+            requester=self.requester,
+            title='Chamado recente',
+            description='Descricao recente',
+            location=self.location,
+            device=self.device,
+            priority=Ticket.HIGH,
+            category=Ticket.NETWORK,
+        )
+
+        response = self.client.get(
+            reverse('tickets:api_last_ticket'),
+            {'matricula': self.requester.matricula},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body['found'])
+        self.assertEqual(body['ticket']['id'], latest_ticket.id)
+        self.assertNotEqual(body['ticket']['id'], older_ticket.id)
+        self.assertEqual(body['ticket']['ticket_number'], latest_ticket.ticket_number)
+        self.assertEqual(body['ticket']['title'], 'Chamado recente')
+        self.assertEqual(body['location']['id'], self.location.id)
+        self.assertEqual(body['location']['name'], 'PCP')
+        self.assertEqual(body['location']['description'], 'Planejamento')
+
+
 class TicketNotificationsPollTests(TestCase):
     def setUp(self):
         self.user = CustomUser.objects.create_user(

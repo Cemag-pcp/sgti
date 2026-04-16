@@ -5,6 +5,7 @@ app_name = 'tickets'
 
 urlpatterns = [
     path('api/devices/', views.DeviceListApiView.as_view(), name='api_devices'),
+    path('api/last-ticket/', views.LastTicketByMatriculaApiView.as_view(), name='api_last_ticket'),
     path('api/push/subscription/', views.PushSubscriptionView.as_view(), name='push_subscription'),
     path('api/open/', views.TicketCreateApiView.as_view(), name='api_open'),
     path('api/notifications/poll/', views.TicketNotificationsPollView.as_view(), name='notifications_poll'),
