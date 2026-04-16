@@ -12,6 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, View
 from datetime import timedelta
 import json
+import logging
 
 from apps.core.mixins import TechnicianRequiredMixin, SupervisorRequiredMixin
 from apps.accounts.models import CustomUser, RequesterProfile
@@ -25,6 +26,9 @@ from .forms import (
 from .services import create_ticket_from_submission
 from .whatsapp import send_whatsapp_text_message
 from .whatsapp_bot import extract_whatsapp_messages, process_incoming_whatsapp_message
+
+
+logger = logging.getLogger(__name__)
 
 
 class RequesterLookupView(View):
@@ -671,76 +675,84 @@ class TicketCreateApiView(View):
     def post(self, request, *args, **kwargs):
         try:
             payload = json.loads(request.body or b'{}')
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'invalid_json'}, status=400)
+            location_value = payload.get('location_id', payload.get('location', ''))
+            device_value = payload.get('device_id', payload.get('device', ''))
 
-        location_value = payload.get('location_id', payload.get('location', ''))
-        device_value = payload.get('device_id', payload.get('device', ''))
+            form_data = {
+                'matricula': str(payload.get('matricula', '')).strip(),
+                'requester_name': str(payload.get('requester_name', '')).strip(),
+                'title': str(payload.get('title', '')).strip(),
+                'description': str(payload.get('description', '')).strip(),
+                'category': str(payload.get('category', Ticket.OTHER)).strip() or Ticket.OTHER,
+                'priority': str(payload.get('priority', Ticket.MEDIUM)).strip() or Ticket.MEDIUM,
+                'location': location_value,
+                'device': device_value,
+                'asset_tag': str(payload.get('asset_tag', '')).strip(),
+            }
 
-        form_data = {
-            'matricula': str(payload.get('matricula', '')).strip(),
-            'requester_name': str(payload.get('requester_name', '')).strip(),
-            'title': str(payload.get('title', '')).strip(),
-            'description': str(payload.get('description', '')).strip(),
-            'category': str(payload.get('category', Ticket.OTHER)).strip() or Ticket.OTHER,
-            'priority': str(payload.get('priority', Ticket.MEDIUM)).strip() or Ticket.MEDIUM,
-            'location': location_value,
-            'device': device_value,
-            'asset_tag': str(payload.get('asset_tag', '')).strip(),
-        }
-
-        if form_data['location'] and not str(form_data['location']).strip().isdigit():
-            location = Location.objects.filter(name__iexact=str(form_data['location']).strip(), is_active=True).first()
-            form_data['location'] = location.pk if location else ''
-
-        if not form_data['location']:
-            location_name = str(payload.get('location_name', '')).strip()
-            if location_name:
-                location = Location.objects.filter(name__iexact=location_name, is_active=True).first()
+            if form_data['location'] and not str(form_data['location']).strip().isdigit():
+                location = Location.objects.filter(name__iexact=str(form_data['location']).strip(), is_active=True).first()
                 form_data['location'] = location.pk if location else ''
 
-        if form_data['device'] and not str(form_data['device']).strip().isdigit():
-            device = Device.objects.filter(name__iexact=str(form_data['device']).strip(), is_active=True).first()
-            form_data['device'] = device.pk if device else ''
+            if not form_data['location']:
+                location_name = str(payload.get('location_name', '')).strip()
+                if location_name:
+                    location = Location.objects.filter(name__iexact=location_name, is_active=True).first()
+                    form_data['location'] = location.pk if location else ''
 
-        if not form_data['device']:
-            device_name = str(payload.get('device_name', '')).strip()
-            if device_name:
-                device = Device.objects.filter(name__iexact=device_name, is_active=True).first()
+            if form_data['device'] and not str(form_data['device']).strip().isdigit():
+                device = Device.objects.filter(name__iexact=str(form_data['device']).strip(), is_active=True).first()
                 form_data['device'] = device.pk if device else ''
 
-        form = TicketSubmitForm(form_data)
-        if not form.is_valid():
-            return JsonResponse({'error': 'validation_error', 'errors': form.errors}, status=400)
+            if not form_data['device']:
+                device_name = str(payload.get('device_name', '')).strip()
+                if device_name:
+                    device = Device.objects.filter(name__iexact=device_name, is_active=True).first()
+                    form_data['device'] = device.pk if device else ''
 
-        ticket = create_ticket_from_submission(
-            form,
-            requester_data={
-                'email': str(payload.get('requester_email', '')).strip(),
-                'phone': str(payload.get('requester_phone', '')).strip(),
-                'whatsapp_phone': str(payload.get('requester_whatsapp_phone', '')).strip(),
-            },
-        )
-        if ticket is None:
-            return JsonResponse({'error': 'validation_error', 'errors': form.errors}, status=400)
+            form = TicketSubmitForm(form_data)
+            if not form.is_valid():
+                return JsonResponse({'error': 'validation_error', 'errors': form.errors}, status=400)
 
-        return JsonResponse(
-            {
-                'status': 'created',
-                'ticket': {
-                    'id': ticket.id,
-                    'ticket_number': ticket.ticket_number,
-                    'title': ticket.title,
-                    'status': ticket.status,
-                    'priority': ticket.priority,
-                    'category': ticket.category,
-                    'requester_id': ticket.requester_id,
-                    'location_id': ticket.location_id,
-                    'device_id': ticket.device_id,
+            ticket = create_ticket_from_submission(
+                form,
+                requester_data={
+                    'email': str(payload.get('requester_email', '')).strip(),
+                    'phone': str(payload.get('requester_phone', '')).strip(),
+                    'whatsapp_phone': str(payload.get('requester_whatsapp_phone', '')).strip(),
                 },
-            },
-            status=201,
-        )
+            )
+            if ticket is None:
+                return JsonResponse({'error': 'validation_error', 'errors': form.errors}, status=400)
+
+            return JsonResponse(
+                {
+                    'status': 'created',
+                    'ticket': {
+                        'id': ticket.id,
+                        'ticket_number': ticket.ticket_number,
+                        'title': ticket.title,
+                        'status': ticket.status,
+                        'priority': ticket.priority,
+                        'category': ticket.category,
+                        'requester_id': ticket.requester_id,
+                        'location_id': ticket.location_id,
+                        'device_id': ticket.device_id,
+                    },
+                },
+                status=201,
+            )
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'invalid_json'}, status=400)
+        except Exception as exc:
+            logger.exception('Unexpected error while creating ticket via API')
+            return JsonResponse(
+                {
+                    'error': 'internal_error',
+                    'detail': str(exc),
+                },
+                status=500,
+            )
 
 
 class TicketNotificationsPollView(TechnicianRequiredMixin, View):

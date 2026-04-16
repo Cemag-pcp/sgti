@@ -222,6 +222,28 @@ class TicketCreateApiTests(TestCase):
         self.assertIn('asset_tag', body['errors'])
         self.assertFalse(Ticket.objects.filter(title='Notebook sem ligar').exists())
 
+    @patch('apps.tickets.views.create_ticket_from_submission')
+    def test_api_returns_json_for_unexpected_internal_error(self, mock_create_ticket):
+        mock_create_ticket.side_effect = RuntimeError('simulated failure')
+        payload = {
+            'matricula': '12345',
+            'requester_name': 'Maria Silva',
+            'title': 'Notebook sem ligar',
+            'description': 'O equipamento nao liga desde cedo.',
+            'location_id': self.location.id,
+            'device_id': self.device.id,
+        }
+
+        response = self.client.post(
+            reverse('tickets:api_open'),
+            data=json.dumps(payload),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json()['error'], 'internal_error')
+        self.assertEqual(response.json()['detail'], 'simulated failure')
+
 
 class TicketNotificationsPollTests(TestCase):
     def setUp(self):
