@@ -307,6 +307,73 @@ class TicketAreaInlineUpdateTests(TestCase):
         self.assertEqual(self.ticket.area, '')
 
 
+class TicketCategoryInlineUpdateTests(TestCase):
+    def setUp(self):
+        self.supervisor = CustomUser.objects.create_user(
+            email='supervisor-category@example.com',
+            password='senha123',
+            full_name='Supervisor Category',
+            role=CustomUser.SUPERVISOR,
+            is_staff=True,
+        )
+        self.technician = CustomUser.objects.create_user(
+            email='tecnico-category@example.com',
+            password='senha123',
+            full_name='Tecnico Category',
+            role=CustomUser.TECHNICIAN,
+        )
+        self.other_technician = CustomUser.objects.create_user(
+            email='outro-category@example.com',
+            password='senha123',
+            full_name='Outro Tecnico Category',
+            role=CustomUser.TECHNICIAN,
+        )
+        self.requester = RequesterProfile.objects.create(
+            matricula='1009',
+            full_name='Solicitante Category',
+        )
+        self.ticket = Ticket.objects.create(
+            title='Chamado categoria',
+            description='Descricao',
+            requester=self.requester,
+            assigned_to=self.technician,
+            category=Ticket.SOFTWARE,
+        )
+
+    def test_assigned_technician_can_update_category(self):
+        self.client.force_login(self.technician)
+
+        response = self.client.post(
+            reverse('tickets:category', kwargs={'pk': self.ticket.pk}),
+            data={'category': Ticket.NETWORK},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                'ok': True,
+                'category': Ticket.NETWORK,
+                'category_display': 'Rede',
+            },
+        )
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.category, Ticket.NETWORK)
+
+    def test_unassigned_technician_cannot_update_category(self):
+        self.client.force_login(self.other_technician)
+
+        response = self.client.post(
+            reverse('tickets:category', kwargs={'pk': self.ticket.pk}),
+            data={'category': Ticket.ACCESS},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.category, Ticket.SOFTWARE)
+
+
 class TicketPriorityInlineUpdateTests(TestCase):
     def setUp(self):
         SLAConfig.objects.create(priority=Ticket.MEDIUM, resolution_hours=24, is_active=True)

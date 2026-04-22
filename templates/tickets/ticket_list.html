@@ -14,154 +14,218 @@
 {% endblock %}
 
 {% block content %}
+<section class="space-y-5">
+  <div class="rounded-2xl border border-gray-200 bg-white shadow-sm">
+    <div class="border-b border-gray-100 px-4 py-4">
+      <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <form method="get" class="flex-1">
+          <div class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"/>
+            </svg>
+            <input type="text" name="q" value="{{ filters.q|default:'' }}" placeholder="Pesquisar tickets, solicitantes, titulo ou descricao"
+              class="w-full bg-transparent text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none">
+            {% if filters.status %}<input type="hidden" name="status" value="{{ filters.status }}">{% endif %}
+            {% if filters.priority %}<input type="hidden" name="priority" value="{{ filters.priority }}">{% endif %}
+            {% if filters.assigned %}<input type="hidden" name="assigned" value="{{ filters.assigned }}">{% endif %}
+            <button type="submit" class="text-xs font-semibold text-blue-600 hover:text-blue-700 whitespace-nowrap">Buscar</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
-<form method="get" class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-5 flex flex-wrap gap-3 items-end">
-  <div class="flex-1 min-w-48">
-    <label class="form-label">Buscar</label>
-    <input type="text" name="q" value="{{ filters.q|default:'' }}" placeholder="Numero, titulo..."
-      class="form-input">
-  </div>
-  <div>
-    <label class="form-label">Status</label>
-    <select name="status" class="form-input">
-      <option value="">Todos</option>
-      {% for value, label in status_choices %}
-      <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+    <div class="grid grid-cols-2 gap-3 px-4 py-3 lg:grid-cols-3 xl:grid-cols-6">
+      {% for tab in status_tabs %}
+      <a href="{{ tab.url }}"
+        class="rounded-2xl border px-4 py-3 transition-colors {% if tab.active %}border-slate-900 bg-slate-900 text-white{% else %}border-gray-200 bg-white text-gray-600 hover:bg-gray-50{% endif %}">
+        <div class="text-[11px] uppercase tracking-wider {% if tab.active %}text-white/70{% else %}text-gray-400{% endif %}">{{ tab.label }}</div>
+        <div class="mt-1 text-lg font-semibold">{{ tab.count }}</div>
+      </a>
       {% endfor %}
-    </select>
+    </div>
   </div>
-  <div>
-    <label class="form-label">Prioridade</label>
-    <select name="priority" class="form-input">
-      <option value="">Todas</option>
-      {% for value, label in priority_choices %}
-      <option value="{{ value }}" {% if filters.priority == value %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  {% if request.user.is_supervisor %}
-  <div>
-    <label class="form-label">Atribuido</label>
-    <select name="assigned" class="form-input">
-      <option value="">Todos</option>
-      <option value="unassigned" {% if filters.assigned == 'unassigned' %}selected{% endif %}>Nao atribuidos</option>
-      <option value="me" {% if filters.assigned == 'me' %}selected{% endif %}>Para mim</option>
-    </select>
-  </div>
-  {% endif %}
-  <button type="submit" class="btn-primary">Filtrar</button>
-  {% if filters %}
-  <a href="{% url 'tickets:list' %}" class="btn-secondary">Limpar</a>
-  {% endif %}
-</form>
 
-<div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-  {% if tickets %}
-  <div class="overflow-x-auto">
-    <table class="w-full">
-      <thead class="bg-gray-50 border-b border-gray-100">
-        <tr>
-          <th class="table-th">#</th>
-          <th class="table-th">Titulo</th>
-          <th class="table-th">Solicitante</th>
-          <th class="table-th">Área</th>
-          <th class="table-th">Setor</th>
-          <th class="table-th">Prioridade</th>
-          <th class="table-th">Status</th>
-          <th class="table-th">Prazo</th>
-          <th class="table-th">Atribuido a</th>
-          <th class="table-th">Aberto em</th>
-          <th class="table-th"></th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-gray-50">
-        {% for ticket in tickets %}
-        <tr class="hover:bg-gray-50 transition-colors">
-          <td class="table-td font-mono text-xs text-gray-500">{{ ticket.ticket_number }}</td>
-          <td class="table-td font-medium max-w-xs truncate">{{ ticket.title }}</td>
-          <td class="table-td text-gray-500">{{ ticket.requester.full_name|default:"-" }}</td>
-          <td class="table-td text-gray-500">
-            {% if request.user.is_supervisor or ticket.assigned_to_id == request.user.id %}
-            <form method="post" action="{% url 'tickets:area' ticket.pk %}" class="min-w-40" data-inline-update="area">
-              {% csrf_token %}
-              <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <select name="area" class="form-input text-sm py-1.5" data-inline-select onchange="this.form.requestSubmit()">
-                <option value="">-</option>
-                {% for value, label in ticket.AREA_CHOICES %}
-                <option value="{{ value }}" {% if ticket.area == value %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-              </select>
-            </form>
-            {% else %}
-            {{ ticket.get_area_display|default:"-" }}
+  <div class="space-y-4">
+    <div class="space-y-4">
+      <div class="rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div class="flex flex-col gap-3 border-b border-gray-100 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.24em] text-gray-400">Painel de tickets</p>
+          </div>
+
+          <form method="get" class="flex flex-col gap-2 lg:flex-row lg:items-center">
+            {% if filters.q %}<input type="hidden" name="q" value="{{ filters.q }}">{% endif %}
+            <select name="status" class="form-input lg:w-40">
+              <option value="">Todos os status</option>
+              {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <select name="priority" class="form-input lg:w-40">
+              <option value="">Todas as prioridades</option>
+              {% for value, label in priority_choices %}
+              <option value="{{ value }}" {% if filters.priority == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            {% if request.user.is_supervisor %}
+            <select name="assigned" class="form-input lg:w-40">
+              <option value="">Qualquer fila</option>
+              <option value="unassigned" {% if filters.assigned == 'unassigned' %}selected{% endif %}>Nao atribuidos</option>
+              <option value="me" {% if filters.assigned == 'me' %}selected{% endif %}>Atribuidos a mim</option>
+            </select>
             {% endif %}
-          </td>
-          <td class="table-td text-gray-500">{{ ticket.location.name|default:"-" }}</td>
-          <td class="table-td">
-            {% if request.user.is_supervisor or ticket.assigned_to_id == request.user.id %}
-            <form method="post" action="{% url 'tickets:priority' ticket.pk %}" class="min-w-32" data-inline-update="priority">
-              {% csrf_token %}
-              <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <select name="priority"
-                class="badge {{ ticket.priority_class }} w-full border-0 pr-7 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
-                data-inline-select onchange="this.form.requestSubmit()">
-                {% for value, label in ticket.PRIORITY_CHOICES %}
-                <option value="{{ value }}" {% if ticket.priority == value %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-              </select>
-            </form>
-            {% else %}
-            <span class="badge {{ ticket.priority_class }}">{{ ticket.get_priority_display }}</span>
+            <button type="submit" class="btn-primary justify-center">Atualizar</button>
+            {% if filters %}
+            <a href="{% url 'tickets:list' %}" class="btn-secondary justify-center">Limpar</a>
             {% endif %}
-          </td>
-          <td class="table-td">
-            {% if request.user.is_supervisor or ticket.assigned_to_id == request.user.id %}
-            <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="min-w-36" data-inline-update="status">
-              {% csrf_token %}
-              <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <select name="status"
-                class="badge {{ ticket.status_class }} w-full border-0 pr-7 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
-                data-inline-select onchange="this.form.requestSubmit()">
-                {% for value, label in ticket.STATUS_CHOICES %}
-                <option value="{{ value }}" {% if ticket.status == value %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-              </select>
-            </form>
-            {% else %}
-            <span class="badge {{ ticket.status_class }}">{{ ticket.get_status_display }}</span>
-            {% endif %}
-          </td>
-          <td class="table-td">
-            {% if ticket.sla_flag_label %}
-            <span class="badge {{ ticket.sla_flag_class }}" data-sla-badge>{{ ticket.sla_flag_label }}</span>
-            {% else %}
-            <span class="text-gray-400 text-xs" data-sla-badge>-</span>
-            {% endif %}
-          </td>
-          <td class="table-td text-gray-500">{{ ticket.assigned_to.full_name|default:"-" }}</td>
-          <td class="table-td text-gray-400 text-xs">{{ ticket.created_at|date:"d/m/Y H:i" }}</td>
-          <td class="table-td">
-            <a href="{% url 'tickets:detail' ticket.pk %}" class="text-blue-600 hover:text-blue-700 text-xs font-medium">
-              Ver ->
-            </a>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+          </form>
+        </div>
+
+        <div class="flex flex-col gap-3 border-b border-gray-100 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div class="flex items-center gap-3 text-sm text-gray-500">
+            <span>{{ page_summary.page }} de {{ page_summary.pages }}</span>
+            <span>{{ page_summary.total }} tickets visiveis</span>
+          </div>
+        </div>
+
+        {% if tickets %}
+        <div class="p-4">
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {% for ticket in tickets %}
+            <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all hover:border-blue-200 hover:shadow-md" data-ticket-card>
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex flex-wrap gap-2">
+                  {% if request.user.is_supervisor or ticket.assigned_to_id == request.user.id %}
+                  <form method="post" action="{% url 'tickets:category' ticket.pk %}" class="min-w-0" data-inline-update="category">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <select name="category"
+                      class="badge bg-slate-100 text-slate-700 border-0 pr-7 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      data-inline-select onchange="this.form.requestSubmit()">
+                      {% for value, label in ticket.CATEGORY_CHOICES %}
+                      <option value="{{ value }}" {% if ticket.category == value %}selected{% endif %}>{{ label }}</option>
+                      {% endfor %}
+                    </select>
+                  </form>
+                  {% else %}
+                  <span class="badge bg-slate-100 text-slate-700">{{ ticket.get_category_display }}</span>
+                  {% endif %}
+                  {% if request.user.is_supervisor or ticket.assigned_to_id == request.user.id %}
+                  <form method="post" action="{% url 'tickets:priority' ticket.pk %}" class="min-w-0" data-inline-update="priority">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <select name="priority"
+                      class="badge {{ ticket.priority_class }} border-0 pr-7 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      data-inline-select onchange="this.form.requestSubmit()">
+                      {% for value, label in ticket.PRIORITY_CHOICES %}
+                      <option value="{{ value }}" {% if ticket.priority == value %}selected{% endif %}>{{ label }}</option>
+                      {% endfor %}
+                    </select>
+                  </form>
+                  {% else %}
+                  <span class="badge {{ ticket.priority_class }}">{{ ticket.get_priority_display }}</span>
+                  {% endif %}
+                </div>
+                <a href="{% url 'tickets:detail' ticket.pk %}" class="rounded-xl border border-gray-200 p-2 text-gray-400 hover:bg-gray-50 hover:text-gray-600">
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5h.01M7 5h.01M17 5h.01M5 12h.01M12 12h.01M19 12h.01M5 19h.01M12 19h.01M19 19h.01"/>
+                  </svg>
+                </a>
+              </div>
+
+              <div class="mt-4">
+                <div class="flex items-center gap-2">
+                  <span class="font-mono text-[11px] uppercase tracking-wider text-gray-400">{{ ticket.ticket_number }}</span>
+                  {% if ticket.sla_flag_label %}
+                  <span class="badge {{ ticket.sla_flag_class }}" data-sla-badge>{{ ticket.sla_flag_label }}</span>
+                  {% else %}
+                  <span class="text-gray-400 text-xs" data-sla-badge>-</span>
+                  {% endif %}
+                </div>
+                <h3 class="mt-2 truncate text-sm font-semibold text-gray-900">{{ ticket.title }}</h3>
+                <p class="mt-3 truncate text-xs text-gray-500">{{ ticket.description }}</p>
+              </div>
+
+              <div class="mt-4 space-y-3">
+                <div class="rounded-2xl bg-slate-50 p-3">
+                  <div class="text-xs text-gray-500">
+                    <div>
+                      <p class="text-[11px] uppercase tracking-wider text-gray-400">Area</p>
+                      {% if request.user.is_supervisor or ticket.assigned_to_id == request.user.id %}
+                      <form method="post" action="{% url 'tickets:area' ticket.pk %}" class="mt-1" data-inline-update="area">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <select name="area" class="form-input py-1.5 text-xs" data-inline-select onchange="this.form.requestSubmit()">
+                          <option value="">-</option>
+                          {% for value, label in ticket.AREA_CHOICES %}
+                          <option value="{{ value }}" {% if ticket.area == value %}selected{% endif %}>{{ label }}</option>
+                          {% endfor %}
+                        </select>
+                      </form>
+                      {% else %}
+                      <p class="mt-1 text-xs text-gray-700">{{ ticket.get_area_display|default:"-" }}</p>
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3">
+                  <div class="flex min-w-0 items-center gap-3">
+                    <div class="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+                      {{ ticket.requester_initials }}
+                    </div>
+                    <div class="min-w-0">
+                      <p class="truncate text-sm font-medium text-gray-900">{{ ticket.requester.full_name|default:"Sem solicitante" }}</p>
+                      <p class="truncate text-xs text-gray-500">
+                        {{ ticket.location.name|default:"Sem setor" }}{% if ticket.assigned_to %} · {{ ticket.assigned_to.full_name }}{% endif %}
+                      </p>
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <p class="text-[11px] uppercase tracking-wider text-gray-400">Aberto</p>
+                    <p class="text-xs font-medium text-gray-700">{{ ticket.created_at|date:"d/m H:i" }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-4 flex gap-2">
+                {% if request.user.is_supervisor or ticket.assigned_to_id == request.user.id %}
+                <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex-1" data-inline-update="status">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <select name="status"
+                    class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    data-inline-select onchange="this.form.requestSubmit()">
+                    {% for value, label in ticket.STATUS_CHOICES %}
+                    <option value="{{ value }}" {% if ticket.status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </form>
+                {% else %}
+                <div class="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700">
+                  {{ ticket.get_status_display }}
+                </div>
+                {% endif %}
+              </div>
+            </article>
+            {% endfor %}
+          </div>
+        </div>
+        {% include "partials/pagination.html" %}
+        {% else %}
+        <div class="px-4 py-16 text-center">
+          <svg class="mx-auto mb-3 h-12 w-12 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/>
+          </svg>
+          <p class="font-medium text-gray-400">Nenhum chamado encontrado</p>
+          <p class="mt-1 text-sm text-gray-300">Ajuste os filtros ou <a href="{% url 'tickets:submit' %}" class="text-blue-500">abra um novo chamado</a></p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
   </div>
-  {% include "partials/pagination.html" %}
-  {% else %}
-  <div class="text-center py-16">
-    <svg class="w-12 h-12 text-gray-200 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-    </svg>
-    <p class="text-gray-400 font-medium">Nenhum chamado encontrado</p>
-    <p class="text-gray-300 text-sm mt-1">Ajuste os filtros ou <a href="{% url 'tickets:submit' %}" class="text-blue-500">abra um novo chamado</a></p>
-  </div>
-  {% endif %}
-</div>
+</section>
 
 <script>
   (() => {
@@ -193,8 +257,8 @@
     };
 
     const updateSlaBadge = (form, payload) => {
-      const row = form.closest('tr');
-      const badge = row?.querySelector('[data-sla-badge]');
+      const card = form.closest('[data-ticket-card]');
+      const badge = card?.querySelector('[data-sla-badge]');
       if (!badge || !payload) return;
 
       badge.textContent = payload.sla_flag_label || '-';
@@ -243,7 +307,6 @@
           }
 
           if (form.dataset.inlineUpdate === 'status') {
-            replaceBadgeClasses(select, STATUS_BADGE_CLASSES, payload.status_class);
             updateSlaBadge(form, payload);
           }
         } catch (error) {
@@ -259,5 +322,4 @@
     });
   })();
 </script>
-
 {% endblock %}

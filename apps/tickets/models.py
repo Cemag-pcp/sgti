@@ -290,7 +290,7 @@ class Ticket(models.Model):
             return 'Atrasado'
         if self.is_active:
             return f'{self.due_date:%d/%m/%Y}'
-        return f'Concluído em {self.due_date:%d/%m/%Y}'
+        return f'{self.due_date:%d/%m/%Y}'
 
     @property
     def sla_flag_class(self):

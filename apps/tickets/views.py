@@ -12,6 +12,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, View
 from datetime import timedelta
+from urllib.parse import urlencode
 import json
 import logging
 
@@ -150,11 +151,16 @@ class TicketListView(TechnicianRequiredMixin, ListView):
     context_object_name = 'tickets'
     paginate_by = 20
 
-    def get_queryset(self):
-        qs = Ticket.objects.select_related('requester', 'assigned_to', 'location')
+    def _base_queryset(self):
+        qs = Ticket.objects.select_related('requester', 'assigned_to', 'location', 'device')
         user = self.request.user
         if user.role == 'TECHNICIAN':
             qs = qs.filter(Q(assigned_to=user) | Q(assigned_to__isnull=True))
+        return qs
+
+    def get_queryset(self):
+        qs = self._base_queryset()
+        user = self.request.user
 
         status = self.request.GET.get('status')
         priority = self.request.GET.get('priority')
@@ -175,6 +181,101 @@ class TicketListView(TechnicianRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        user = self.request.user
+        base_qs = self._base_queryset()
+        active_statuses = [Ticket.OPEN, Ticket.IN_PROGRESS, Ticket.WAITING]
+        current_filters = self.request.GET.copy()
+
+        def build_query(**updates):
+            params = {}
+            if current_filters.get('q'):
+                params['q'] = current_filters.get('q')
+            for key, value in updates.items():
+                if value not in (None, ''):
+                    params[key] = value
+            encoded = urlencode([(key, value) for key, value in params.items()])
+            return f'?{encoded}' if encoded else reverse('tickets:list')
+
+        def ticket_initials(ticket):
+            name = (ticket.requester.full_name if ticket.requester else 'Sem solicitante').strip()
+            pieces = [piece for piece in name.split() if piece]
+            if not pieces:
+                return 'SG'
+            return ''.join(piece[0].upper() for piece in pieces[:2])
+
+        def queue_label(ticket):
+            segments = [ticket.get_area_display() or 'Triagem', ticket.get_category_display()]
+            if ticket.device:
+                segments.append(ticket.device.name)
+            return ' / '.join(part for part in segments if part)
+
+        for ticket in ctx['tickets']:
+            ticket.requester_initials = ticket_initials(ticket)
+            ticket.queue_label = queue_label(ticket)
+            ticket.meta_label = ticket.device.name if ticket.device else (ticket.location.name if ticket.location else 'Sem contexto')
+            ticket.progress_value = 100 if ticket.status in [Ticket.RESOLVED, Ticket.CLOSED] else 72 if ticket.status == Ticket.IN_PROGRESS else 46 if ticket.status == Ticket.WAITING else 24
+            ticket.progress_class = 'bg-green-500' if ticket.status in [Ticket.RESOLVED, Ticket.CLOSED] else 'bg-amber-400' if ticket.status == Ticket.WAITING else 'bg-blue-500'
+
+        ctx['status_tabs'] = [
+            {
+                'label': 'Abertos',
+                'count': base_qs.filter(status=Ticket.OPEN).count(),
+                'url': build_query(status=Ticket.OPEN, assigned=None),
+                'active': current_filters.get('status') == Ticket.OPEN,
+            },
+            {
+                'label': 'Atribuidos a mim',
+                'count': base_qs.filter(assigned_to=user, status__in=active_statuses).count(),
+                'url': build_query(assigned='me', status=None),
+                'active': current_filters.get('assigned') == 'me',
+            },
+            {
+                'label': 'Em andamento',
+                'count': base_qs.filter(status=Ticket.IN_PROGRESS).count(),
+                'url': build_query(status=Ticket.IN_PROGRESS, assigned=None),
+                'active': current_filters.get('status') == Ticket.IN_PROGRESS,
+            },
+            {
+                'label': 'Aguardando',
+                'count': base_qs.filter(status=Ticket.WAITING).count(),
+                'url': build_query(status=Ticket.WAITING, assigned=None),
+                'active': current_filters.get('status') == Ticket.WAITING,
+            },
+            {
+                'label': 'Nao atribuidos',
+                'count': base_qs.filter(assigned_to__isnull=True, status__in=active_statuses).count(),
+                'url': build_query(assigned='unassigned', status=None),
+                'active': current_filters.get('assigned') == 'unassigned',
+            },
+            {
+                'label': 'Concluidos',
+                'count': base_qs.filter(status__in=[Ticket.RESOLVED, Ticket.CLOSED]).count(),
+                'url': build_query(status=Ticket.RESOLVED, assigned=None),
+                'active': current_filters.get('status') in [Ticket.RESOLVED, Ticket.CLOSED],
+            },
+        ]
+
+        quick_actions = list(
+            base_qs.filter(status__in=active_statuses)
+            .order_by('-priority', 'due_date', '-created_at')[:6]
+        )
+        due_soon = list(
+            base_qs.filter(status__in=active_statuses, due_date__isnull=False)
+            .order_by('due_date', 'created_at')[:6]
+        )
+
+        for ticket in quick_actions:
+            ticket.requester_initials = ticket_initials(ticket)
+            ticket.action_label = 'Assumir' if not ticket.assigned_to_id else 'Tratar'
+        for ticket in due_soon:
+            ticket.requester_initials = ticket_initials(ticket)
+        ctx['quick_actions'] = quick_actions
+        ctx['due_soon'] = due_soon
+        ctx['page_summary'] = {
+            'page': ctx['page_obj'].number,
+            'pages': ctx['paginator'].num_pages,
+            'total': ctx['paginator'].count,
+        }
         ctx['status_choices'] = Ticket.STATUS_CHOICES
         ctx['priority_choices'] = Ticket.PRIORITY_CHOICES
         ctx['technicians'] = CustomUser.objects.filter(is_active=True)
@@ -522,6 +623,7 @@ class TicketAssignView(SupervisorRequiredMixin, View):
 
 class TicketStatusView(TechnicianRequiredMixin, View):
     def post(self, request, pk):
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         ticket = get_object_or_404(Ticket, pk=pk)
         if not ticket.can_edit(request.user):
             raise PermissionDenied
@@ -542,8 +644,9 @@ class TicketStatusView(TechnicianRequiredMixin, View):
                 old_assigned_to=ticket.assigned_to,
                 new_assigned_to=ticket.assigned_to,
             )
-            messages.success(request, 'Status atualizado.')
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            if not is_ajax:
+                messages.success(request, 'Status atualizado.')
+            if is_ajax:
                 return JsonResponse(
                     {
                         'ok': True,
@@ -556,7 +659,7 @@ class TicketStatusView(TechnicianRequiredMixin, View):
                         'closed_at': ticket.closed_at.isoformat() if ticket.closed_at else None,
                     }
                 )
-        elif request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        elif is_ajax:
             return JsonResponse(
                 {
                     'ok': False,
@@ -579,6 +682,7 @@ class TicketStatusView(TechnicianRequiredMixin, View):
 
 class TicketAreaUpdateView(TechnicianRequiredMixin, View):
     def post(self, request, pk):
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         ticket = get_object_or_404(Ticket, pk=pk)
         if not ticket.can_edit(request.user):
             raise PermissionDenied
@@ -586,8 +690,9 @@ class TicketAreaUpdateView(TechnicianRequiredMixin, View):
         area = request.POST.get('area', '').strip()
         valid_areas = {value for value, _ in Ticket.AREA_CHOICES}
         if area and area not in valid_areas:
-            messages.error(request, 'Area informada e invalida.')
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            if not is_ajax:
+                messages.error(request, 'Area informada e invalida.')
+            if is_ajax:
                 return JsonResponse(
                     {
                         'ok': False,
@@ -600,8 +705,9 @@ class TicketAreaUpdateView(TechnicianRequiredMixin, View):
         else:
             ticket.area = area
             ticket.save(update_fields=['area', 'updated_at'])
-            messages.success(request, 'Area atualizada.')
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            if not is_ajax:
+                messages.success(request, 'Area atualizada.')
+            if is_ajax:
                 return JsonResponse(
                     {
                         'ok': True,
@@ -620,8 +726,55 @@ class TicketAreaUpdateView(TechnicianRequiredMixin, View):
         return redirect('tickets:list')
 
 
+class TicketCategoryUpdateView(TechnicianRequiredMixin, View):
+    def post(self, request, pk):
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        ticket = get_object_or_404(Ticket, pk=pk)
+        if not ticket.can_edit(request.user):
+            raise PermissionDenied
+
+        category = request.POST.get('category', '').strip()
+        valid_categories = {value for value, _ in Ticket.CATEGORY_CHOICES}
+        if category not in valid_categories:
+            if not is_ajax:
+                messages.error(request, 'Categoria informada e invalida.')
+            if is_ajax:
+                return JsonResponse(
+                    {
+                        'ok': False,
+                        'error': 'invalid_category',
+                        'category': ticket.category,
+                        'category_display': ticket.get_category_display(),
+                    },
+                    status=400,
+                )
+        else:
+            ticket.category = category
+            ticket.save(update_fields=['category', 'updated_at'])
+            if not is_ajax:
+                messages.success(request, 'Categoria atualizada.')
+            if is_ajax:
+                return JsonResponse(
+                    {
+                        'ok': True,
+                        'category': ticket.category,
+                        'category_display': ticket.get_category_display(),
+                    }
+                )
+
+        next_url = request.POST.get('next', '').strip()
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return redirect(next_url)
+        return redirect('tickets:list')
+
+
 class TicketPriorityUpdateView(TechnicianRequiredMixin, View):
     def post(self, request, pk):
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         ticket = get_object_or_404(Ticket, pk=pk)
         if not ticket.can_edit(request.user):
             raise PermissionDenied
@@ -629,8 +782,9 @@ class TicketPriorityUpdateView(TechnicianRequiredMixin, View):
         priority = request.POST.get('priority', '').strip()
         valid_priorities = {value for value, _ in Ticket.PRIORITY_CHOICES}
         if priority not in valid_priorities:
-            messages.error(request, 'Prioridade informada e invalida.')
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            if not is_ajax:
+                messages.error(request, 'Prioridade informada e invalida.')
+            if is_ajax:
                 return JsonResponse(
                     {
                         'ok': False,
@@ -659,8 +813,9 @@ class TicketPriorityUpdateView(TechnicianRequiredMixin, View):
                     f'para {ticket.get_priority_display()}'
                 ),
             )
-            messages.success(request, 'Prioridade atualizada.')
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            if not is_ajax:
+                messages.success(request, 'Prioridade atualizada.')
+            if is_ajax:
                 return JsonResponse(
                     {
                         'ok': True,
