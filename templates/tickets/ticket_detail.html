@@ -149,6 +149,9 @@
               {% if h.old_assigned_to != h.new_assigned_to %}
                 Delegado para <strong>{{ h.new_assigned_to.full_name|default:"ninguém" }}</strong>
               {% endif %}
+              {% if h.comment %}
+                {{ h.comment }}
+              {% endif %}
             </span>
             <span class="text-gray-400 ml-2 text-xs">
               por {{ h.changed_by.full_name|default:"sistema" }} — {{ h.changed_at|date:"d/m/Y H:i" }}

@@ -223,11 +223,7 @@ class Ticket(models.Model):
 
         # Aplica prazo do SLA automaticamente na criação se não informado
         if not self.pk and not self.due_date:
-            try:
-                sla = SLAConfig.objects.get(priority=self.priority, is_active=True)
-                self.due_date = (timezone.now() + timedelta(hours=sla.resolution_hours)).date()
-            except SLAConfig.DoesNotExist:
-                pass
+            self.recalculate_due_date_from_sla()
 
         super().save(*args, **kwargs)
 
@@ -269,6 +265,14 @@ class Ticket(models.Model):
 
     def status_class(self):
         return self.STATUS_CLASSES.get(self.status, '')
+
+    def recalculate_due_date_from_sla(self):
+        try:
+            sla = SLAConfig.objects.get(priority=self.priority, is_active=True)
+            opened_at = self.created_at or timezone.now()
+            self.due_date = (opened_at + timedelta(hours=sla.resolution_hours)).date()
+        except SLAConfig.DoesNotExist:
+            self.due_date = None
 
     @property
     def is_active(self):

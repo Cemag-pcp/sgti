@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import CustomUser, RequesterProfile
-from apps.tickets.models import BrowserPushSubscription, Device, Location, Ticket, WhatsAppConversation
+from apps.tickets.models import BrowserPushSubscription, Device, Location, SLAConfig, Ticket, WhatsAppConversation
 from apps.tickets.whatsapp import (
     WhatsAppAPIError,
     build_whatsapp_headers,
@@ -217,6 +217,286 @@ class TicketCreateApiTests(TestCase):
         self.assertEqual(requester.email, 'maria@empresa.com')
         self.assertEqual(requester.phone, '1133334444')
         self.assertEqual(requester.whatsapp_phone, '5511999999999')
+
+
+class TicketAreaInlineUpdateTests(TestCase):
+    def setUp(self):
+        self.supervisor = CustomUser.objects.create_user(
+            email='supervisor@example.com',
+            password='senha123',
+            full_name='Supervisor',
+            role=CustomUser.SUPERVISOR,
+            is_staff=True,
+        )
+        self.technician = CustomUser.objects.create_user(
+            email='tecnico@example.com',
+            password='senha123',
+            full_name='Tecnico',
+            role=CustomUser.TECHNICIAN,
+        )
+        self.other_technician = CustomUser.objects.create_user(
+            email='outro@example.com',
+            password='senha123',
+            full_name='Outro Tecnico',
+            role=CustomUser.TECHNICIAN,
+        )
+        self.requester = RequesterProfile.objects.create(
+            matricula='1001',
+            full_name='Solicitante Teste',
+        )
+        self.ticket = Ticket.objects.create(
+            title='Chamado de teste',
+            description='Descricao',
+            requester=self.requester,
+            assigned_to=self.technician,
+        )
+
+    def test_supervisor_can_update_area_from_list(self):
+        self.client.force_login(self.supervisor)
+
+        response = self.client.post(
+            reverse('tickets:area', kwargs={'pk': self.ticket.pk}),
+            data={'area': Ticket.DEVELOPMENT, 'next': '/tickets/?status=OPEN'},
+        )
+
+        self.assertRedirects(response, '/tickets/?status=OPEN', fetch_redirect_response=False)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.area, Ticket.DEVELOPMENT)
+
+    def test_assigned_technician_can_update_area(self):
+        self.client.force_login(self.technician)
+
+        response = self.client.post(
+            reverse('tickets:area', kwargs={'pk': self.ticket.pk}),
+            data={'area': Ticket.INFRASTRUCTURE},
+        )
+
+        self.assertRedirects(response, reverse('tickets:list'), fetch_redirect_response=False)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.area, Ticket.INFRASTRUCTURE)
+
+    def test_area_update_returns_json_for_ajax(self):
+        self.client.force_login(self.technician)
+
+        response = self.client.post(
+            reverse('tickets:area', kwargs={'pk': self.ticket.pk}),
+            data={'area': Ticket.DEVELOPMENT},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                'ok': True,
+                'area': Ticket.DEVELOPMENT,
+                'area_display': 'Desenvolvimento',
+            },
+        )
+
+    def test_unassigned_technician_cannot_update_area(self):
+        self.client.force_login(self.other_technician)
+
+        response = self.client.post(
+            reverse('tickets:area', kwargs={'pk': self.ticket.pk}),
+            data={'area': Ticket.DEVELOPMENT},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.area, '')
+
+
+class TicketPriorityInlineUpdateTests(TestCase):
+    def setUp(self):
+        SLAConfig.objects.create(priority=Ticket.MEDIUM, resolution_hours=24, is_active=True)
+        SLAConfig.objects.create(priority=Ticket.HIGH, resolution_hours=8, is_active=True)
+        SLAConfig.objects.create(priority=Ticket.CRITICAL, resolution_hours=4, is_active=True)
+        self.supervisor = CustomUser.objects.create_user(
+            email='supervisor-priority@example.com',
+            password='senha123',
+            full_name='Supervisor Priority',
+            role=CustomUser.SUPERVISOR,
+            is_staff=True,
+        )
+        self.technician = CustomUser.objects.create_user(
+            email='tecnico-priority@example.com',
+            password='senha123',
+            full_name='Tecnico Priority',
+            role=CustomUser.TECHNICIAN,
+        )
+        self.other_technician = CustomUser.objects.create_user(
+            email='outro-priority@example.com',
+            password='senha123',
+            full_name='Outro Tecnico Priority',
+            role=CustomUser.TECHNICIAN,
+        )
+        self.requester = RequesterProfile.objects.create(
+            matricula='1002',
+            full_name='Solicitante Priority',
+        )
+        self.ticket = Ticket.objects.create(
+            title='Chamado prioridade',
+            description='Descricao',
+            requester=self.requester,
+            assigned_to=self.technician,
+            priority=Ticket.MEDIUM,
+            due_date=timezone.localdate() + timedelta(days=7),
+        )
+
+    def test_supervisor_can_update_priority_from_list(self):
+        self.client.force_login(self.supervisor)
+
+        response = self.client.post(
+            reverse('tickets:priority', kwargs={'pk': self.ticket.pk}),
+            data={'priority': Ticket.CRITICAL, 'next': '/tickets/?priority=MEDIUM'},
+        )
+
+        self.assertRedirects(response, '/tickets/?priority=MEDIUM', fetch_redirect_response=False)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.priority, Ticket.CRITICAL)
+
+    def test_assigned_technician_can_update_priority(self):
+        self.client.force_login(self.technician)
+        opened_at = timezone.now() - timedelta(days=2)
+        Ticket.objects.filter(pk=self.ticket.pk).update(created_at=opened_at)
+        self.ticket.refresh_from_db()
+
+        response = self.client.post(
+            reverse('tickets:priority', kwargs={'pk': self.ticket.pk}),
+            data={'priority': Ticket.HIGH},
+        )
+
+        self.assertRedirects(response, reverse('tickets:list'), fetch_redirect_response=False)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.priority, Ticket.HIGH)
+        history = StatusHistory.objects.latest('changed_at')
+        self.assertEqual(history.ticket, self.ticket)
+        self.assertEqual(history.old_status, self.ticket.status)
+        self.assertEqual(history.new_status, self.ticket.status)
+        self.assertEqual(history.comment, 'Prioridade alterada de Média para Alta')
+        self.assertEqual(self.ticket.due_date, (opened_at + timedelta(hours=8)).date())
+
+    def test_priority_update_returns_json_for_ajax(self):
+        self.client.force_login(self.technician)
+        opened_at = timezone.now() - timedelta(days=1)
+        Ticket.objects.filter(pk=self.ticket.pk).update(created_at=opened_at)
+        self.ticket.refresh_from_db()
+
+        response = self.client.post(
+            reverse('tickets:priority', kwargs={'pk': self.ticket.pk}),
+            data={'priority': Ticket.HIGH},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['ok'], True)
+        self.assertEqual(response.json()['priority'], Ticket.HIGH)
+        self.assertEqual(response.json()['priority_display'], 'Alta')
+        self.assertIn('bg-orange-100', response.json()['priority_class'])
+        self.assertEqual(response.json()['due_date'], (opened_at + timedelta(hours=8)).date().isoformat())
+        self.assertTrue(response.json()['sla_flag_label'])
+
+    def test_unassigned_technician_cannot_update_priority(self):
+        self.client.force_login(self.other_technician)
+
+        response = self.client.post(
+            reverse('tickets:priority', kwargs={'pk': self.ticket.pk}),
+            data={'priority': Ticket.LOW},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.priority, Ticket.MEDIUM)
+
+
+class TicketStatusInlineUpdateTests(TestCase):
+    def setUp(self):
+        self.supervisor = CustomUser.objects.create_user(
+            email='supervisor-status@example.com',
+            password='senha123',
+            full_name='Supervisor Status',
+            role=CustomUser.SUPERVISOR,
+            is_staff=True,
+        )
+        self.technician = CustomUser.objects.create_user(
+            email='tecnico-status@example.com',
+            password='senha123',
+            full_name='Tecnico Status',
+            role=CustomUser.TECHNICIAN,
+        )
+        self.other_technician = CustomUser.objects.create_user(
+            email='outro-status@example.com',
+            password='senha123',
+            full_name='Outro Tecnico Status',
+            role=CustomUser.TECHNICIAN,
+        )
+        self.requester = RequesterProfile.objects.create(
+            matricula='1003',
+            full_name='Solicitante Status',
+        )
+        self.ticket = Ticket.objects.create(
+            title='Chamado status',
+            description='Descricao',
+            requester=self.requester,
+            assigned_to=self.technician,
+            status=Ticket.OPEN,
+        )
+
+    def test_supervisor_can_update_status_from_list(self):
+        self.client.force_login(self.supervisor)
+
+        response = self.client.post(
+            reverse('tickets:status', kwargs={'pk': self.ticket.pk}),
+            data={'status': Ticket.IN_PROGRESS, 'next': '/tickets/?status=OPEN'},
+        )
+
+        self.assertRedirects(response, '/tickets/?status=OPEN', fetch_redirect_response=False)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, Ticket.IN_PROGRESS)
+        history = StatusHistory.objects.get(ticket=self.ticket)
+        self.assertEqual(history.old_status, Ticket.OPEN)
+        self.assertEqual(history.new_status, Ticket.IN_PROGRESS)
+
+    def test_assigned_technician_can_resolve_status_and_sets_timestamp(self):
+        self.client.force_login(self.technician)
+
+        response = self.client.post(
+            reverse('tickets:status', kwargs={'pk': self.ticket.pk}),
+            data={'status': Ticket.RESOLVED},
+        )
+
+        self.assertRedirects(response, reverse('tickets:detail', kwargs={'pk': self.ticket.pk}), fetch_redirect_response=False)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, Ticket.RESOLVED)
+        self.assertIsNotNone(self.ticket.resolved_at)
+
+    def test_status_update_returns_json_for_ajax(self):
+        self.client.force_login(self.technician)
+
+        response = self.client.post(
+            reverse('tickets:status', kwargs={'pk': self.ticket.pk}),
+            data={'status': Ticket.IN_PROGRESS},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['ok'], True)
+        self.assertEqual(response.json()['status'], Ticket.IN_PROGRESS)
+        self.assertEqual(response.json()['status_display'], 'Em andamento')
+        self.assertIn('bg-yellow-100', response.json()['status_class'])
+
+    def test_unassigned_technician_cannot_update_status(self):
+        self.client.force_login(self.other_technician)
+
+        response = self.client.post(
+            reverse('tickets:status', kwargs={'pk': self.ticket.pk}),
+            data={'status': Ticket.CLOSED},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, Ticket.OPEN)
 
     def test_api_accepts_device_and_location_alias_fields(self):
         payload = {

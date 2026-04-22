@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.decorators import method_decorator
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, View
 from datetime import timedelta
@@ -524,9 +525,9 @@ class TicketStatusView(TechnicianRequiredMixin, View):
         ticket = get_object_or_404(Ticket, pk=pk)
         if not ticket.can_edit(request.user):
             raise PermissionDenied
+        old_status = ticket.status
         form = TicketStatusForm(request.POST, instance=ticket)
         if form.is_valid():
-            old_status = ticket.status
             updated = form.save(commit=False)
             if updated.status == Ticket.RESOLVED and not ticket.resolved_at:
                 updated.resolved_at = timezone.now()
@@ -542,7 +543,144 @@ class TicketStatusView(TechnicianRequiredMixin, View):
                 new_assigned_to=ticket.assigned_to,
             )
             messages.success(request, 'Status atualizado.')
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse(
+                    {
+                        'ok': True,
+                        'status': ticket.status,
+                        'status_display': ticket.get_status_display(),
+                        'status_class': ticket.status_class(),
+                        'sla_flag_label': ticket.sla_flag_label,
+                        'sla_flag_class': ticket.sla_flag_class,
+                        'resolved_at': ticket.resolved_at.isoformat() if ticket.resolved_at else None,
+                        'closed_at': ticket.closed_at.isoformat() if ticket.closed_at else None,
+                    }
+                )
+        elif request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse(
+                {
+                    'ok': False,
+                    'error': 'invalid_status',
+                    'status': old_status,
+                    'status_display': ticket.get_status_display(),
+                    'status_class': ticket.status_class(),
+                },
+                status=400,
+            )
+        next_url = request.POST.get('next', '').strip()
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return redirect(next_url)
         return redirect('tickets:detail', pk=pk)
+
+
+class TicketAreaUpdateView(TechnicianRequiredMixin, View):
+    def post(self, request, pk):
+        ticket = get_object_or_404(Ticket, pk=pk)
+        if not ticket.can_edit(request.user):
+            raise PermissionDenied
+
+        area = request.POST.get('area', '').strip()
+        valid_areas = {value for value, _ in Ticket.AREA_CHOICES}
+        if area and area not in valid_areas:
+            messages.error(request, 'Area informada e invalida.')
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse(
+                    {
+                        'ok': False,
+                        'error': 'invalid_area',
+                        'area': ticket.area,
+                        'area_display': ticket.get_area_display() or '-',
+                    },
+                    status=400,
+                )
+        else:
+            ticket.area = area
+            ticket.save(update_fields=['area', 'updated_at'])
+            messages.success(request, 'Area atualizada.')
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse(
+                    {
+                        'ok': True,
+                        'area': ticket.area,
+                        'area_display': ticket.get_area_display() or '-',
+                    }
+                )
+
+        next_url = request.POST.get('next', '').strip()
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return redirect(next_url)
+        return redirect('tickets:list')
+
+
+class TicketPriorityUpdateView(TechnicianRequiredMixin, View):
+    def post(self, request, pk):
+        ticket = get_object_or_404(Ticket, pk=pk)
+        if not ticket.can_edit(request.user):
+            raise PermissionDenied
+
+        priority = request.POST.get('priority', '').strip()
+        valid_priorities = {value for value, _ in Ticket.PRIORITY_CHOICES}
+        if priority not in valid_priorities:
+            messages.error(request, 'Prioridade informada e invalida.')
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse(
+                    {
+                        'ok': False,
+                        'error': 'invalid_priority',
+                        'priority': ticket.priority,
+                        'priority_display': ticket.get_priority_display(),
+                        'priority_class': ticket.priority_class(),
+                    },
+                    status=400,
+                )
+        else:
+            old_priority = ticket.priority
+            old_priority_display = ticket.get_priority_display()
+            ticket.priority = priority
+            ticket.recalculate_due_date_from_sla()
+            ticket.save(update_fields=['priority', 'due_date', 'updated_at'])
+            StatusHistory.objects.create(
+                ticket=ticket,
+                changed_by=request.user,
+                old_status=ticket.status,
+                new_status=ticket.status,
+                old_assigned_to=ticket.assigned_to,
+                new_assigned_to=ticket.assigned_to,
+                comment=(
+                    f'Prioridade alterada de {old_priority_display} '
+                    f'para {ticket.get_priority_display()}'
+                ),
+            )
+            messages.success(request, 'Prioridade atualizada.')
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse(
+                    {
+                        'ok': True,
+                        'priority': ticket.priority,
+                        'priority_display': ticket.get_priority_display(),
+                        'priority_class': ticket.priority_class(),
+                        'sla_flag_label': ticket.sla_flag_label,
+                        'sla_flag_class': ticket.sla_flag_class,
+                        'due_date': ticket.due_date.isoformat() if ticket.due_date else None,
+                    }
+                )
+
+        next_url = request.POST.get('next', '').strip()
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return redirect(next_url)
+        return redirect('tickets:list')
 
 
 class TimeEntryCreateView(TechnicianRequiredMixin, View):

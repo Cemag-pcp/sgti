@@ -80,19 +80,62 @@
           <td class="table-td font-mono text-xs text-gray-500">{{ ticket.ticket_number }}</td>
           <td class="table-td font-medium max-w-xs truncate">{{ ticket.title }}</td>
           <td class="table-td text-gray-500">{{ ticket.requester.full_name|default:"-" }}</td>
-          <td class="table-td text-gray-500">{{ ticket.get_area_display|default:"-" }}</td>
+          <td class="table-td text-gray-500">
+            {% if request.user.is_supervisor or ticket.assigned_to_id == request.user.id %}
+            <form method="post" action="{% url 'tickets:area' ticket.pk %}" class="min-w-40" data-inline-update="area">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <select name="area" class="form-input text-sm py-1.5" data-inline-select onchange="this.form.requestSubmit()">
+                <option value="">-</option>
+                {% for value, label in ticket.AREA_CHOICES %}
+                <option value="{{ value }}" {% if ticket.area == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </form>
+            {% else %}
+            {{ ticket.get_area_display|default:"-" }}
+            {% endif %}
+          </td>
           <td class="table-td text-gray-500">{{ ticket.location.name|default:"-" }}</td>
           <td class="table-td">
+            {% if request.user.is_supervisor or ticket.assigned_to_id == request.user.id %}
+            <form method="post" action="{% url 'tickets:priority' ticket.pk %}" class="min-w-32" data-inline-update="priority">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <select name="priority"
+                class="badge {{ ticket.priority_class }} w-full border-0 pr-7 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                data-inline-select onchange="this.form.requestSubmit()">
+                {% for value, label in ticket.PRIORITY_CHOICES %}
+                <option value="{{ value }}" {% if ticket.priority == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </form>
+            {% else %}
             <span class="badge {{ ticket.priority_class }}">{{ ticket.get_priority_display }}</span>
+            {% endif %}
           </td>
           <td class="table-td">
+            {% if request.user.is_supervisor or ticket.assigned_to_id == request.user.id %}
+            <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="min-w-36" data-inline-update="status">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <select name="status"
+                class="badge {{ ticket.status_class }} w-full border-0 pr-7 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                data-inline-select onchange="this.form.requestSubmit()">
+                {% for value, label in ticket.STATUS_CHOICES %}
+                <option value="{{ value }}" {% if ticket.status == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </form>
+            {% else %}
             <span class="badge {{ ticket.status_class }}">{{ ticket.get_status_display }}</span>
+            {% endif %}
           </td>
           <td class="table-td">
             {% if ticket.sla_flag_label %}
-            <span class="badge {{ ticket.sla_flag_class }}">{{ ticket.sla_flag_label }}</span>
+            <span class="badge {{ ticket.sla_flag_class }}" data-sla-badge>{{ ticket.sla_flag_label }}</span>
             {% else %}
-            <span class="text-gray-400 text-xs">-</span>
+            <span class="text-gray-400 text-xs" data-sla-badge>-</span>
             {% endif %}
           </td>
           <td class="table-td text-gray-500">{{ ticket.assigned_to.full_name|default:"-" }}</td>
@@ -119,5 +162,102 @@
   </div>
   {% endif %}
 </div>
+
+<script>
+  (() => {
+    const PRIORITY_BADGE_CLASSES = [
+      'bg-green-100', 'text-green-800',
+      'bg-yellow-100', 'text-yellow-800',
+      'bg-orange-100', 'text-orange-800',
+      'bg-red-100', 'text-red-800'
+    ];
+    const STATUS_BADGE_CLASSES = [
+      'bg-blue-100', 'text-blue-800',
+      'bg-yellow-100', 'text-yellow-800',
+      'bg-purple-100', 'text-purple-800',
+      'bg-green-100', 'text-green-800',
+      'bg-gray-100', 'text-gray-700'
+    ];
+    const SLA_BADGE_CLASSES = [
+      'bg-gray-100', 'text-gray-700',
+      'bg-amber-100', 'text-amber-800',
+      'bg-red-100', 'text-red-800',
+      'bg-green-100', 'text-green-800'
+    ];
+
+    const replaceBadgeClasses = (element, classesToRemove, classesToAdd) => {
+      element.classList.remove(...classesToRemove);
+      if (classesToAdd) {
+        element.classList.add(...classesToAdd.split(' '));
+      }
+    };
+
+    const updateSlaBadge = (form, payload) => {
+      const row = form.closest('tr');
+      const badge = row?.querySelector('[data-sla-badge]');
+      if (!badge || !payload) return;
+
+      badge.textContent = payload.sla_flag_label || '-';
+      badge.classList.remove('text-xs', 'text-gray-400');
+
+      if (payload.sla_flag_label) {
+        badge.classList.add('badge');
+        replaceBadgeClasses(badge, SLA_BADGE_CLASSES, payload.sla_flag_class);
+      } else {
+        badge.classList.remove('badge', ...SLA_BADGE_CLASSES);
+        badge.classList.add('text-xs', 'text-gray-400');
+      }
+    };
+
+    document.querySelectorAll('form[data-inline-update]').forEach((form) => {
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        const select = form.querySelector('[data-inline-select]');
+        const previousValue = select.dataset.previousValue ?? select.value;
+        const formData = new FormData(form);
+
+        select.disabled = true;
+        select.classList.add('opacity-60');
+
+        try {
+          const response = await fetch(form.action, {
+            method: 'POST',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: formData,
+            credentials: 'same-origin',
+          });
+
+          const payload = await response.json();
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.error || 'inline_update_failed');
+          }
+
+          select.dataset.previousValue = select.value;
+
+          if (form.dataset.inlineUpdate === 'priority') {
+            replaceBadgeClasses(select, PRIORITY_BADGE_CLASSES, payload.priority_class);
+            updateSlaBadge(form, payload);
+          }
+
+          if (form.dataset.inlineUpdate === 'status') {
+            replaceBadgeClasses(select, STATUS_BADGE_CLASSES, payload.status_class);
+            updateSlaBadge(form, payload);
+          }
+        } catch (error) {
+          select.value = previousValue;
+        } finally {
+          select.disabled = false;
+          select.classList.remove('opacity-60');
+        }
+      });
+
+      const select = form.querySelector('[data-inline-select]');
+      select.dataset.previousValue = select.value;
+    });
+  })();
+</script>
 
 {% endblock %}
