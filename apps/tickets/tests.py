@@ -218,6 +218,31 @@ class TicketCreateApiTests(TestCase):
         self.assertEqual(requester.phone, '1133334444')
         self.assertEqual(requester.whatsapp_phone, '5511999999999')
 
+    def test_api_accepts_optional_area(self):
+        payload = {
+            'matricula': '67890',
+            'requester_name': 'Carlos Lima',
+            'title': 'Falha no sistema',
+            'description': 'Erro ao abrir modulo interno.',
+            'category': Ticket.SOFTWARE,
+            'area': Ticket.DEVELOPMENT,
+            'location_name': 'TI',
+            'device_name': 'Notebook',
+        }
+
+        response = self.client.post(
+            reverse('tickets:api_open'),
+            data=json.dumps(payload),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        ticket = Ticket.objects.get(pk=body['ticket']['id'])
+
+        self.assertEqual(ticket.area, Ticket.DEVELOPMENT)
+        self.assertEqual(body['ticket']['area'], Ticket.DEVELOPMENT)
+
 
 class TicketAreaInlineUpdateTests(TestCase):
     def setUp(self):

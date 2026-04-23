@@ -22,7 +22,7 @@ class TicketSubmitForm(forms.ModelForm):
 
     class Meta:
         model = Ticket
-        fields = ['title', 'description', 'category', 'priority', 'location', 'device']
+        fields = ['title', 'description', 'category', 'area', 'priority', 'location', 'device']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -32,7 +32,8 @@ class TicketSubmitForm(forms.ModelForm):
         self.fields['device'].queryset = Device.objects.filter(is_active=True)
         self.fields['device'].empty_label = 'Escolha o dispositivo'
         self.fields['device'].required = True
-        field_order = ['matricula', 'requester_name', 'title', 'description', 'category', 'priority', 'location', 'device', 'asset_tag']
+        self.fields['area'].required = False
+        field_order = ['matricula', 'requester_name', 'title', 'description', 'category', 'area', 'priority', 'location', 'device', 'asset_tag']
         self.order_fields(field_order)
 
 
