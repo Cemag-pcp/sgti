@@ -1,5 +1,5 @@
 from django import forms
-from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, SetPasswordForm
 from .models import CustomUser, RequesterProfile
 
 
@@ -56,3 +56,31 @@ class RequesterForm(forms.ModelForm):
             'phone': forms.TextInput(attrs={'placeholder': '(00) 00000-0000'}),
             'whatsapp_phone': forms.TextInput(attrs={'placeholder': '5511999999999'}),
         }
+
+
+class StyledPasswordResetForm(PasswordResetForm):
+    email = forms.EmailField(
+        label='E-mail',
+        widget=forms.EmailInput(attrs={
+            'class': 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500',
+            'placeholder': 'seu@email.com',
+            'autofocus': True,
+        }),
+    )
+
+
+class StyledSetPasswordForm(SetPasswordForm):
+    new_password1 = forms.CharField(
+        label='Nova senha',
+        widget=forms.PasswordInput(attrs={
+            'class': 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500',
+            'placeholder': 'Digite a nova senha',
+        }),
+    )
+    new_password2 = forms.CharField(
+        label='Confirmar nova senha',
+        widget=forms.PasswordInput(attrs={
+            'class': 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500',
+            'placeholder': 'Repita a nova senha',
+        }),
+    )

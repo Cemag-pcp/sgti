@@ -2,11 +2,19 @@ from django.contrib.auth import views as auth_views
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
+from urllib.parse import urlparse
 from django.views.generic import ListView, View
 
 from apps.core.mixins import SupervisorRequiredMixin, TechnicianRequiredMixin
 from .models import CustomUser, RequesterProfile
-from .forms import CustomAuthenticationForm, CustomUserForm, RequesterForm
+from .forms import (
+    CustomAuthenticationForm,
+    CustomUserForm,
+    RequesterForm,
+    StyledPasswordResetForm,
+    StyledSetPasswordForm,
+)
+from django.conf import settings
 
 
 class LoginView(auth_views.LoginView):
@@ -24,6 +32,38 @@ class LoginView(auth_views.LoginView):
             '127.0.0.1',
             *self.success_url_allowed_hosts,
         }
+
+
+class PasswordResetView(auth_views.PasswordResetView):
+    template_name = 'accounts/password_reset_form.html'
+    email_template_name = 'accounts/emails/password_reset_email.txt'
+    subject_template_name = 'accounts/emails/password_reset_subject.txt'
+    success_url = reverse_lazy('accounts:password_reset_done')
+    form_class = StyledPasswordResetForm
+
+    def get_extra_email_context(self):
+        parsed_base_url = urlparse(settings.APP_BASE_URL)
+        domain = parsed_base_url.netloc or self.request.get_host()
+        protocol = parsed_base_url.scheme or ('https' if self.request.is_secure() else 'http')
+        return {
+            'domain': domain,
+            'site_name': 'SGTI',
+            'protocol': protocol,
+        }
+
+
+class PasswordResetDoneView(auth_views.PasswordResetDoneView):
+    template_name = 'accounts/password_reset_done.html'
+
+
+class PasswordResetConfirmView(auth_views.PasswordResetConfirmView):
+    template_name = 'accounts/password_reset_confirm.html'
+    success_url = reverse_lazy('accounts:password_reset_complete')
+    form_class = StyledSetPasswordForm
+
+
+class PasswordResetCompleteView(auth_views.PasswordResetCompleteView):
+    template_name = 'accounts/password_reset_complete.html'
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────

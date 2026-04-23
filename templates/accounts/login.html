@@ -22,6 +22,7 @@
 
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
       <h2 class="text-lg font-semibold text-gray-900 mb-6">Entrar</h2>
+      {% include "partials/flash_messages.html" %}
 
       {% if form.non_field_errors %}
       <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">
@@ -49,6 +50,12 @@
           Entrar
         </button>
       </form>
+
+      <div class="mt-4 text-center">
+        <a href="{% url 'accounts:password_reset' %}" class="text-sm text-blue-600 hover:text-blue-700 font-medium">
+          Esqueci minha senha
+        </a>
+      </div>
     </div>
 
     <p class="text-center text-sm text-gray-500 mt-6">
