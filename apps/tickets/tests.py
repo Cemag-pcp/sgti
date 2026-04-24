@@ -631,7 +631,7 @@ class TicketStatusInlineUpdateTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {'error': 'invalid_json'})
 
-    def test_api_returns_validation_error_when_asset_tag_is_not_found(self):
+    def test_api_accepts_unknown_asset_tag_as_free_text(self):
         payload = {
             'matricula': '12345',
             'requester_name': 'Maria Silva',
@@ -648,11 +648,11 @@ class TicketStatusInlineUpdateTests(TestCase):
             content_type='application/json',
         )
 
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 201)
         body = response.json()
-        self.assertEqual(body['error'], 'validation_error')
-        self.assertIn('asset_tag', body['errors'])
-        self.assertFalse(Ticket.objects.filter(title='Notebook sem ligar').exists())
+        ticket = Ticket.objects.get(pk=body['ticket']['id'])
+        self.assertEqual(ticket.asset_tag, 'AT-9999')
+        self.assertIsNone(ticket.asset_id)
 
     @patch('apps.tickets.views.create_ticket_from_submission')
     def test_api_returns_json_for_unexpected_internal_error(self, mock_create_ticket):

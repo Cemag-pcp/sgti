@@ -1,5 +1,4 @@
 from apps.accounts.models import RequesterProfile
-from apps.assets.models import Asset
 
 from .models import Ticket
 
@@ -42,13 +41,7 @@ def create_ticket_from_submission(form, *, created_by=None, requester_data=None)
     if created_by is not None:
         ticket.created_by = created_by
 
-    asset_tag = form.cleaned_data.get('asset_tag', '').strip()
-    if asset_tag:
-        try:
-            ticket.asset = Asset.objects.get(asset_tag=asset_tag)
-        except Asset.DoesNotExist:
-            form.add_error('asset_tag', f'Tombamento "{asset_tag}" nÃ£o encontrado.')
-            return None
+    ticket.asset_tag = form.cleaned_data.get('asset_tag', '').strip()
 
     ticket.save()
     return ticket

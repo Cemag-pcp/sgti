@@ -181,6 +181,7 @@ class Ticket(models.Model):
         related_name='tickets',
         verbose_name='Ativo relacionado',
     )
+    asset_tag = models.CharField(max_length=50, blank=True, verbose_name='Tombamento informado')
     location = models.ForeignKey(
         Location,
         on_delete=models.SET_NULL,

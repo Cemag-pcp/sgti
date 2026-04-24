@@ -1073,6 +1073,7 @@ class TicketCreateApiView(View):
                         'priority': ticket.priority,
                         'category': ticket.category,
                         'area': ticket.area,
+                        'asset_tag': ticket.asset_tag,
                         'requester_id': ticket.requester_id,
                         'location_id': ticket.location_id,
                         'device_id': ticket.device_id,
