@@ -1,0 +1,66 @@
+<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+
+  <div id="updates-list" class="space-y-4 lg:col-span-2">
+    {% for update in project.updates.all %}
+    <div class="rounded-[24px] border border-slate-200 bg-white p-5">
+      <div class="mb-3 flex items-start justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-600">
+            {{ update.author.full_name|first|upper }}
+          </div>
+          <div>
+            <p class="text-sm font-medium text-slate-900">{{ update.author.full_name }}</p>
+            <p class="text-xs text-slate-400">{{ update.created_at|date:"d/m/Y H:i" }}</p>
+          </div>
+        </div>
+        {% if update.author == request.user or is_supervisor %}
+        <form method="post"
+              action="{% url 'projects:update_delete' project.pk update.pk %}"
+              data-update-form="delete"
+              onsubmit="return confirm('Remover esta atualização?')">
+          {% csrf_token %}
+          <button type="submit" class="text-slate-300 transition-colors hover:text-red-500">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+          </button>
+        </form>
+        {% endif %}
+      </div>
+      <p class="whitespace-pre-line text-sm text-slate-700">{{ update.content }}</p>
+    </div>
+    {% empty %}
+    <div class="rounded-[24px] border border-slate-200 bg-white p-10 text-center">
+      <svg class="mx-auto mb-3 h-10 w-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+      </svg>
+      <p class="text-sm text-slate-400">Nenhuma atualização registrada</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="lg:col-span-1">
+    <div class="sticky top-4 rounded-[24px] border border-slate-200 bg-white p-5">
+      <h3 class="mb-4 font-semibold text-slate-900">Registrar atualização</h3>
+      <form method="post"
+            action="{% url 'projects:update_create' project.pk %}"
+            class="space-y-3"
+            data-update-form="create">
+        {% csrf_token %}
+        <div>
+          {{ update_form.content }}
+          {% if update_form.content.errors %}
+          <p class="mt-1 text-xs text-red-600">{{ update_form.content.errors|join:", " }}</p>
+          {% endif %}
+        </div>
+        <button type="submit"
+                class="project-update-submit w-full rounded-xl bg-[#2F7FD8] py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1e6cc4]">
+          Publicar atualização
+        </button>
+      </form>
+    </div>
+  </div>
+
+</div>

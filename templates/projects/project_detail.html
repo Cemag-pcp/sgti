@@ -1,0 +1,1201 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ project.code }} - {{ project.name }} - SGTI{% endblock %}
+
+{% block extra_head %}
+<style>
+body > .flex.h-screen.overflow-hidden > .flex-1.flex.flex-col.overflow-hidden > header {
+  display: none;
+}
+
+#flash-messages {
+  display: none;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="project-detail-page w-full pb-4">
+  {% with stats=project.task_stats %}
+
+  <!-- ══════════════════════════════════════════
+       PAINEL PRINCIPAL
+  ══════════════════════════════════════════ -->
+  <div class="project-hero-shell mb-6">
+    <div class="project-hero-band">
+      <div class="project-hero-inner px-4 pt-5 sm:px-5 lg:px-6">
+        <div class="project-hero-top flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div class="flex min-w-0 items-center gap-3">
+            <a href="{% url 'projects:list' %}"
+               class="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-slate-900 transition-colors hover:bg-white/20">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+            </a>
+            <h1 class="project-hero-title truncate text-[2rem] font-bold tracking-[-0.045em] text-[#111827] sm:text-[2.2rem]">{{ project.name }}</h1>
+          </div>
+
+          <div class="project-hero-actions flex flex-wrap items-center gap-2 xl:justify-end">
+            <span class="project-hero-chip is-status inline-flex items-center gap-1.5 rounded-full bg-[#156ec6] px-3.5 py-1.5 text-sm font-medium text-white shadow-[0_4px_10px_rgba(21,110,198,0.18)]">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8 7V3m8 4V3m-9 8h10m-11 9h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v11a2 2 0 002 2z"/>
+              </svg>
+              {{ project.get_status_display }}
+            </span>
+
+            <span class="project-hero-chip is-priority inline-flex items-center gap-1.5 rounded-full bg-[#f7c74f] px-3.5 py-1.5 text-sm font-medium text-slate-900 shadow-[0_4px_10px_rgba(247,199,79,0.22)]">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+              </svg>
+              {{ project.get_priority_display }} Prioridade
+            </span>
+
+            <details class="relative">
+              <summary class="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-full text-slate-900 transition-colors hover:bg-white/20">
+                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                </svg>
+              </summary>
+              <div class="absolute right-0 z-20 mt-2 w-44 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                {% if can_manage_project %}
+                <a href="{% url 'projects:edit' project.pk %}"
+                   class="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+                  <svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                  </svg>
+                  Editar projeto
+                </a>
+                {% endif %}
+                {% if is_supervisor %}
+                <button type="button"
+                        onclick="document.getElementById('modal-delete-project').classList.remove('hidden')"
+                        class="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-red-700 hover:bg-red-50">
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                  Excluir projeto
+                </button>
+                {% endif %}
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="project-hero-float px-4 sm:px-5 lg:px-6">
+      <div class="project-meta-grid grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="project-meta-card rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-[0_4px_16px_rgba(15,23,42,0.08)]">
+          <p class="project-meta-label text-[0.78rem] font-semibold uppercase tracking-[0.04em] text-slate-700">Responsável</p>
+          <div class="mt-3 flex items-center gap-2.5">
+            <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#eef5ff] text-[#2f7fd8]">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M5.121 17.804A9 9 0 1118.88 17.8M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+            </div>
+            <p class="project-meta-value text-[0.95rem] font-medium leading-snug text-slate-900">{{ project.responsible.full_name|default:"-" }}</p>
+          </div>
+        </div>
+
+        <div class="project-meta-card rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-[0_4px_16px_rgba(15,23,42,0.08)]">
+          <p class="project-meta-label text-[0.78rem] font-semibold uppercase tracking-[0.04em] text-slate-700">Criador</p>
+          <p class="project-meta-value text-[0.95rem] font-medium text-slate-900">{{ project.created_by.full_name|default:"-" }}</p>
+        </div>
+
+        <div class="project-meta-card rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-[0_4px_16px_rgba(15,23,42,0.08)]">
+          <p class="project-meta-label text-[0.78rem] font-semibold uppercase tracking-[0.04em] text-slate-700">Início</p>
+          <p class="project-meta-value text-[0.95rem] font-semibold text-slate-900">
+            {% if project.start_date %}{{ project.start_date|date:"d/m/Y" }}{% else %}-{% endif %}
+          </p>
+        </div>
+
+        <div class="project-meta-card rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-[0_4px_16px_rgba(15,23,42,0.08)]">
+          <p class="project-meta-label text-[0.78rem] font-semibold uppercase tracking-[0.04em] text-slate-700">Prazo</p>
+          <p class="project-meta-value text-[0.95rem] font-semibold {% if project.is_overdue %}text-red-600{% else %}text-slate-900{% endif %}">
+            {% if project.end_date %}{{ project.end_date|date:"d/m/Y" }}{% else %}-{% endif %}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="project-summary-wrap px-4 sm:px-5 lg:px-6">
+      <div class="project-summary-card rounded-[18px] border border-slate-200 bg-white px-4 py-5 shadow-[0_6px_20px_rgba(15,23,42,0.08)] sm:px-5 lg:px-6">
+        <div class="project-summary-layout grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,470px)] xl:items-end">
+          <div class="project-summary-copy min-w-0">
+            <div>
+              <p class="text-[0.78rem] font-semibold uppercase tracking-[0.04em] text-slate-900">Objetivo</p>
+              <p class="mt-2 text-[0.98rem] leading-7 text-slate-900">{{ project.objective }}</p>
+            </div>
+
+            <div class="mt-3">
+              <p class="text-[0.78rem] font-semibold uppercase tracking-[0.04em] text-slate-900">Resumo</p>
+              <p class="mt-2 text-[0.98rem] leading-7 text-slate-900">{{ project.description }}</p>
+            </div>
+
+            <div class="mt-4 max-w-[520px] border-t border-slate-200 pt-3">
+              <p class="text-[0.78rem] font-semibold uppercase tracking-[0.04em] text-slate-900">Progresso</p>
+              <div class="project-progress-inline mt-1.5 flex items-center gap-3">
+                <span class="project-progress-value text-[2.35rem] font-bold leading-none tracking-[-0.05em] text-slate-950">{{ stats.percent }}%</span>
+                <div class="project-progress-track h-2.5 w-full overflow-hidden rounded-full bg-slate-200"
+                     style="--progress-value: {{ stats.percent }}%;">
+                  <div class="project-progress-fill h-full rounded-full bg-[#cfd8e3] transition-all duration-500{% if stats.percent > 0 %} has-value{% endif %}"></div>
+                </div>
+              </div>
+              <p class="mt-2 text-sm text-slate-500">{{ stats.done }}/{{ stats.total }} tarefas</p>
+            </div>
+          </div>
+
+          <div class="project-summary-stats grid gap-3 sm:grid-cols-3 xl:self-end">
+            <div class="project-stat-card rounded-[14px] border border-[#dbe6f3] bg-[#eef5ff] px-4 py-4">
+              <p class="text-[0.78rem] font-semibold uppercase tracking-[0.04em] text-slate-800">Total</p>
+              <p class="mt-2 text-[2rem] font-semibold leading-none tracking-[-0.04em] text-slate-950">{{ stats.total }}</p>
+            </div>
+            <div class="project-stat-card rounded-[14px] border border-[#dbe6f3] bg-[#eef5ff] px-4 py-4">
+              <p class="text-[0.78rem] font-semibold uppercase tracking-[0.04em] text-slate-800">Done</p>
+              <p class="mt-2 text-[2rem] font-semibold leading-none tracking-[-0.04em] text-slate-950">{{ stats.done }}</p>
+            </div>
+            <div class="project-stat-card rounded-[14px] border border-[#dbe6f3] bg-[#eef5ff] px-4 py-4">
+              <p class="text-[0.78rem] font-semibold uppercase tracking-[0.04em] text-slate-800">Status</p>
+              <p class="mt-2 text-[1.05rem] font-semibold leading-tight {% if project.is_overdue %}text-red-600{% else %}text-slate-950{% endif %}">
+                {% if project.is_overdue %}Atrasado{% else %}No prazo{% endif %}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endwith %}
+
+  <!-- ══════════════════════════════════════════
+       ABAS DE NAVEGAÇÃO
+  ══════════════════════════════════════════ -->
+  <div class="project-tabs-shell mb-4 border-b border-slate-200/90">
+    <nav class="project-tabs-nav -mb-px flex gap-6 overflow-x-auto px-2" id="project-tabs">
+      <button type="button" onclick="switchTab('tarefas')" id="tab-tarefas"
+              class="tab-btn whitespace-nowrap border-b-2 border-[#2F7FD8] px-1 pb-3 pt-1 text-[1.05rem] font-medium text-[#2F7FD8] transition-colors">
+        Tarefas
+      </button>
+      <button type="button" onclick="switchTab('membros')" id="tab-membros"
+              class="tab-btn whitespace-nowrap border-b-2 border-transparent px-1 pb-3 pt-1 text-[1.05rem] font-medium text-slate-500 transition-colors hover:text-slate-700">
+        Membros
+      </button>
+      <button type="button" onclick="switchTab('atualizacoes')" id="tab-atualizacoes"
+              class="tab-btn whitespace-nowrap border-b-2 border-transparent px-1 pb-3 pt-1 text-[1.05rem] font-medium text-slate-500 transition-colors hover:text-slate-700">
+        Atualizações
+      </button>
+    </nav>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       PAINEL: TAREFAS (Kanban)
+  ══════════════════════════════════════════ -->
+  <div id="panel-tarefas" class="tab-panel">
+
+    {% if can_manage_project %}
+    <div class="mb-5 flex justify-end">
+      <button type="button"
+              onclick="document.getElementById('modal-task-create').classList.remove('hidden')"
+              class="project-new-task-btn inline-flex items-center gap-2 rounded-full bg-[#2F7FD8] px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#1e6cc4]">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        Nova tarefa
+      </button>
+    </div>
+    {% endif %}
+
+    <!-- Board Kanban -->
+    <div class="project-kanban-board flex gap-3 overflow-x-auto pb-6" id="kanban-board">
+      {% for status_key, status_label, col_tasks in kanban_columns %}
+      <div class="project-kanban-column-wrap w-[255px] flex-shrink-0" data-column="{{ status_key }}">
+
+        <!-- Título da coluna com contagem inline: "Backlog (1)" -->
+        <h3 class="project-kanban-heading task-count-header mb-2 px-1 text-[0.98rem] font-semibold text-slate-800">
+          {{ status_label }} <span class="task-count">({{ col_tasks|length }})</span>
+        </h3>
+
+        <!-- Área de drop da coluna -->
+        <div class="project-kanban-column kanban-column min-h-[340px] space-y-3 rounded-[16px] border border-slate-200 bg-[#f7f9fc] p-3"
+             data-status="{{ status_key }}"
+             {% if can_manage_project %}
+             ondragover="onDragOver(event)"
+             ondragenter="onDragEnter(event)"
+             ondragleave="onDragLeave(event)"
+             ondrop="onDrop(event, '{{ status_key }}')"
+             {% endif %}
+             style="box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);">
+
+          {% for task in col_tasks %}
+          <!-- Card de tarefa -->
+          <div class="project-task-card kanban-task group rounded-[14px] border border-slate-200 bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(15,23,42,0.1)] {% if can_manage_project %}cursor-grab active:cursor-grabbing{% endif %}"
+               {% if can_manage_project %}
+               draggable="true"
+               ondragstart="onDragStart(event, {{ task.pk }})"
+               ondragend="onDragEnd()"
+               {% endif %}
+               id="task-{{ task.pk }}">
+
+            <!-- Título + ações de hover -->
+            <div class="mb-3 flex items-start justify-between gap-2">
+              <p class="text-[0.98rem] font-medium leading-7 text-slate-900">{{ task.title }}</p>
+              {% if can_manage_project %}
+              <div class="project-task-actions flex flex-shrink-0 items-center gap-1 opacity-100 transition-opacity">
+                <button type="button"
+                        onclick="openEditTask({{ task.pk }}, '{{ task.title|escapejs }}', '{{ task.description|escapejs }}', '{{ task.status }}', '{{ task.priority }}', '{{ task.assignee_id|default:"" }}', '{{ task.due_date|date:"Y-m-d"|default:"" }}')"
+                        class="project-task-edit-btn rounded-lg p-1 text-slate-300 transition-colors hover:text-blue-600" title="Editar">
+                  <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                  </svg>
+                </button>
+                <form method="post" action="{% url 'projects:task_delete' project.pk task.pk %}"
+                      class="inline" onsubmit="return confirm('Remover esta tarefa?')">
+                  {% csrf_token %}
+                  <button type="submit" class="rounded-lg p-1 text-slate-300 transition-colors hover:text-red-600" title="Remover">
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </form>
+              </div>
+              {% endif %}
+            </div>
+
+            <!-- Rodapé do card: prioridade (esq.) | data + avatar (dir.) -->
+            <div class="flex items-center justify-between">
+              <!-- Selo de prioridade -->
+              <span class="project-task-priority inline-flex items-center rounded-full bg-[#f7c74f] px-2.5 py-0.5 text-[0.8rem] font-medium text-slate-900">
+                {{ task.get_priority_display }}
+              </span>
+              <!-- Data + responsável -->
+              <div class="flex items-center gap-2 text-[0.82rem] text-slate-400">
+                {% if task.due_date %}
+                <span class="{% if task.is_overdue %}font-medium text-red-600{% endif %}">{{ task.due_date|date:"d/m" }}</span>
+                {% endif %}
+                {% if task.assignee %}
+                <div class="flex h-6 w-6 items-center justify-center rounded-full bg-[#7aa8e7] text-[11px] font-bold text-white"
+                     title="{{ task.assignee.full_name }}">
+                  {{ task.assignee.full_name|first|upper }}
+                </div>
+                {% endif %}
+              </div>
+            </div>
+
+          </div>
+          {% empty %}
+          <div class="project-empty-column empty-column rounded-[14px] border border-dashed border-slate-300 bg-white/70 py-10 text-center text-sm text-slate-400">
+            Sem tarefas
+          </div>
+          {% endfor %}
+
+        </div><!-- /kanban-column -->
+      </div>
+      {% endfor %}
+    </div><!-- /kanban-board -->
+
+  </div><!-- /panel-tarefas -->
+
+  <!-- ══════════════════════════════════════════
+       PAINEL: MEMBROS
+  ══════════════════════════════════════════ -->
+  <div id="panel-membros" class="tab-panel hidden">
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+
+      <!-- Lista de membros -->
+      <div class="lg:col-span-2">
+        <div class="px-1">
+          <h3 class="mb-4 font-semibold text-slate-900">Membros do projeto</h3>
+          <div class="divide-y divide-slate-100">
+            {% for member in project.members.all %}
+            <div class="flex items-center justify-between px-4 py-3.5">
+              <div class="flex items-center gap-3">
+                <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white
+                  {% if member.role == 'MANAGER' %}bg-blue-500{% elif member.role == 'MEMBER' %}bg-indigo-400{% else %}bg-slate-400{% endif %}">
+                  {{ member.user.full_name|first|upper }}
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-slate-900">{{ member.user.full_name }}</p>
+                  <p class="text-xs text-slate-400">{{ member.user.email }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+                  {% if member.role == 'MANAGER' %}bg-blue-100 text-blue-800
+                  {% elif member.role == 'MEMBER' %}bg-indigo-100 text-indigo-800
+                  {% else %}bg-slate-100 text-slate-600{% endif %}">
+                  {{ member.get_role_display }}
+                </span>
+                {% if can_manage_project %}
+                <form method="post" action="{% url 'projects:member_remove' project.pk member.pk %}"
+                      onsubmit="return confirm('Remover {{ member.user.full_name }} do projeto?')">
+                  {% csrf_token %}
+                  <button type="submit" class="text-slate-300 transition-colors hover:text-red-500" title="Remover">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </div>
+            {% empty %}
+            <div class="px-4 py-10 text-center text-sm text-slate-400">Nenhum membro cadastrado</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Formulário adicionar membro -->
+      {% if can_manage_project %}
+      <div class="lg:col-span-1">
+        <div class="rounded-[24px] border border-slate-200 bg-white p-5">
+          <h3 class="mb-4 font-semibold text-slate-900">Adicionar membro</h3>
+          <form method="post" action="{% url 'projects:member_add' project.pk %}" class="space-y-4">
+            {% csrf_token %}
+            {% for field in member_form %}
+            <div>
+              <label class="mb-1 block text-sm font-medium text-slate-700">{{ field.label }}</label>
+              {{ field }}
+              {% if field.errors %}
+              <p class="mt-1 text-xs text-red-600">{{ field.errors|join:", " }}</p>
+              {% endif %}
+            </div>
+            {% endfor %}
+            <button type="submit"
+                    class="project-member-submit w-full rounded-xl bg-[#2F7FD8] py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1e6cc4]">
+              Adicionar
+            </button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div><!-- /panel-membros -->
+
+  <!-- ══════════════════════════════════════════
+       PAINEL: ATUALIZAÇÕES
+  ══════════════════════════════════════════ -->
+  <div id="panel-atualizacoes" class="tab-panel hidden">
+    {% include "projects/partials/updates_panel.html" %}
+  </div><!-- /panel-atualizacoes -->
+
+</div><!-- /wrapper -->
+
+
+<!-- ══════════════════════════════════════════
+     MODAL: NOVA TAREFA
+══════════════════════════════════════════ -->
+{% if can_manage_project %}
+<div id="modal-task-create" class="project-modal fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-black/50" onclick="document.getElementById('modal-task-create').classList.add('hidden')"></div>
+  <div class="project-modal-panel relative w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+    <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+      <h2 class="text-lg font-semibold text-slate-900">Nova tarefa</h2>
+      <button type="button" onclick="document.getElementById('modal-task-create').classList.add('hidden')"
+              class="text-slate-400 hover:text-slate-600">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <form method="post" action="{% url 'projects:task_create' project.pk %}" class="project-modal-body space-y-4 px-6 py-5">
+      {% csrf_token %}
+      {% for field in task_form %}
+      <div>
+        <label class="mb-1 block text-sm font-medium text-slate-700">{{ field.label }}</label>
+        {{ field }}
+        {% if field.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ field.errors|join:", " }}</p>
+        {% endif %}
+      </div>
+        {% endfor %}
+      <div class="flex justify-end gap-3 pt-2">
+        <button type="button" onclick="document.getElementById('modal-task-create').classList.add('hidden')"
+                class="project-modal-cancel px-4 py-2 text-sm text-slate-500 hover:text-slate-700">Cancelar</button>
+        <button type="submit"
+                class="project-modal-submit rounded-xl bg-[#2F7FD8] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1e6cc4]">
+          Criar tarefa
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     MODAL: EDITAR TAREFA
+══════════════════════════════════════════ -->
+<div id="modal-task-edit" class="project-modal fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-black/50" onclick="document.getElementById('modal-task-edit').classList.add('hidden')"></div>
+  <div class="project-modal-panel relative w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+    <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+      <h2 class="text-lg font-semibold text-slate-900">Editar tarefa</h2>
+      <button type="button" onclick="document.getElementById('modal-task-edit').classList.add('hidden')"
+              class="text-slate-400 hover:text-slate-600">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <form id="form-task-edit" method="post" action="" class="project-modal-body space-y-4 px-6 py-5">
+      {% csrf_token %}
+      <div>
+        <label class="mb-1 block text-sm font-medium text-slate-700">Título <span class="text-red-500">*</span></label>
+        <input type="text" name="title" id="edit-task-title"
+               class="block w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"/>
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-slate-700">Descrição</label>
+        <textarea name="description" id="edit-task-description" rows="3"
+                  class="block w-full resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Status</label>
+          <select name="status" id="edit-task-status"
+                  class="block w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+            {% for val, label in task_form.fields.status.choices %}
+            <option value="{{ val }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Prioridade</label>
+          <select name="priority" id="edit-task-priority"
+                  class="block w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+            {% for val, label in task_form.fields.priority.choices %}
+            <option value="{{ val }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Responsável</label>
+          <select name="assignee" id="edit-task-assignee"
+                  class="block w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">— Sem responsável —</option>
+            {% for choice_val, choice_label in task_form.fields.assignee.choices %}
+            {% if choice_val %}<option value="{{ choice_val }}">{{ choice_label }}</option>{% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Prazo</label>
+          <input type="date" name="due_date" id="edit-task-due_date"
+                 class="block w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"/>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 pt-2">
+        <button type="button" onclick="document.getElementById('modal-task-edit').classList.add('hidden')"
+                class="project-modal-cancel px-4 py-2 text-sm text-slate-500 hover:text-slate-700">Cancelar</button>
+        <button type="submit"
+                class="project-modal-submit rounded-xl bg-[#2F7FD8] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1e6cc4]">
+          Salvar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+
+<!-- ══════════════════════════════════════════
+     MODAL: CONFIRMAR EXCLUSÃO DO PROJETO
+══════════════════════════════════════════ -->
+{% if is_supervisor %}
+<div id="modal-delete-project" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-black/50" onclick="document.getElementById('modal-delete-project').classList.add('hidden')"></div>
+  <div class="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+    <h2 class="mb-2 text-lg font-semibold text-slate-900">Excluir projeto</h2>
+    <p class="mb-5 text-sm text-slate-500">
+      Tem certeza que deseja excluir o projeto
+      <strong>{{ project.code }} — {{ project.name }}</strong>?
+      Esta ação é irreversível e removerá todas as tarefas e membros.
+    </p>
+    <div class="flex justify-end gap-3">
+      <button type="button" onclick="document.getElementById('modal-delete-project').classList.add('hidden')"
+              class="px-4 py-2 text-sm text-slate-500 hover:text-slate-700">Cancelar</button>
+      <form method="post" action="{% url 'projects:delete' project.pk %}">
+        {% csrf_token %}
+        <button type="submit"
+                class="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700">
+          Sim, excluir
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+
+<!-- ══════════════════════════════════════════
+     ESTILOS DO KANBAN
+══════════════════════════════════════════ -->
+<style>
+.project-detail-page {
+  --project-blue-start: #4b95e6;
+  --project-blue-mid: #5ba0eb;
+  --project-blue-end: #4f92de;
+  --project-chip-blue: #156ec6;
+  --project-chip-yellow: #f7c74f;
+  --project-soft-blue: #eef5ff;
+}
+
+.project-detail-page .project-hero-shell {
+  margin-left: -24px;
+  margin-right: -24px;
+  margin-top: -24px;
+  margin-bottom: 24px;
+}
+
+.project-detail-page .project-hero-band {
+  background: linear-gradient(90deg, var(--project-blue-start) 0%, var(--project-blue-mid) 52%, var(--project-blue-end) 100%);
+  min-height: 124px;
+}
+
+.project-detail-page .project-hero-inner {
+  max-width: 100%;
+}
+
+.project-detail-page .project-hero-float {
+  position: relative;
+  z-index: 2;
+  margin-top: -34px;
+}
+
+.project-detail-page .project-hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.project-detail-page .project-hero-title {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #111827;
+}
+
+.project-detail-page .project-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-detail-page .project-hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.project-detail-page .project-hero-chip.is-status {
+  background: var(--project-chip-blue);
+  color: #fff;
+}
+
+.project-detail-page .project-hero-chip.is-priority {
+  background: var(--project-chip-yellow);
+  color: #111827;
+}
+
+.project-detail-page .project-hero-actions details {
+  position: relative;
+  z-index: 30;
+}
+
+.project-detail-page .project-hero-actions details > div {
+  right: 0;
+  left: auto;
+  width: 176px;
+  max-width: calc(100vw - 32px);
+  z-index: 40;
+}
+
+.project-detail-page .project-hero-actions details a,
+.project-detail-page .project-hero-actions details button {
+  transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.project-detail-page .project-hero-actions details a:hover,
+.project-detail-page .project-hero-actions details button:hover {
+  background-color: #f8fafc;
+  transform: translateX(2px);
+}
+
+.project-detail-page .project-hero-actions details button:hover {
+  background-color: #fef2f2;
+}
+
+.project-detail-page .project-hero-actions summary::-webkit-details-marker {
+  display: none;
+}
+
+.project-detail-page .project-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.project-detail-page .project-meta-card {
+  background: #fff;
+  border: 1px solid #dbe3ef;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+  min-height: 102px;
+  padding: 14px 16px;
+}
+
+.project-detail-page .project-meta-label {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0;
+  color: #2b2f38;
+  text-transform: uppercase;
+}
+
+.project-detail-page .project-meta-value {
+  margin-top: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #111827;
+}
+
+.project-detail-page .project-summary-card {
+  border-radius: 18px;
+  border: 1px solid #dbe3ef;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  margin-top: 0;
+  position: relative;
+  z-index: 2;
+}
+
+.project-detail-page .project-summary-wrap {
+  margin-top: 8px;
+}
+
+.project-detail-page .project-summary-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(350px, 470px);
+  align-items: end;
+  gap: 10px;
+}
+
+.project-detail-page .project-summary-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-self: end;
+}
+
+.project-detail-page .project-new-task-btn {
+  background: #2f7fd8;
+  color: #ffffff;
+  border: 1px solid #2f7fd8;
+  box-shadow: 0 6px 14px rgba(47, 127, 216, 0.22);
+}
+
+.project-detail-page .project-new-task-btn:hover {
+  background: #1e6cc4;
+  border-color: #1e6cc4;
+  color: #ffffff;
+}
+
+.project-detail-page .project-update-submit {
+  background: #2f7fd8;
+  color: #ffffff;
+  border: 1px solid #2f7fd8;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.2;
+  box-shadow: 0 6px 14px rgba(47, 127, 216, 0.18);
+}
+
+.project-detail-page .project-update-submit:hover {
+  background: #1e6cc4;
+  border-color: #1e6cc4;
+  color: #ffffff;
+}
+
+.project-detail-page .project-member-submit {
+  background: #2f7fd8;
+  color: #ffffff;
+  border: 1px solid #2f7fd8;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.2;
+  box-shadow: 0 6px 14px rgba(47, 127, 216, 0.18);
+}
+
+.project-detail-page .project-member-submit:hover {
+  background: #1e6cc4;
+  border-color: #1e6cc4;
+  color: #ffffff;
+}
+
+.project-modal {
+  align-items: center;
+  justify-content: center;
+}
+
+.project-modal-panel {
+  width: min(100%, 640px);
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.project-modal-body {
+  overflow-y: auto;
+  max-height: calc(100vh - 120px);
+}
+
+.project-modal-cancel {
+  background: #ffffff;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.project-modal-cancel:hover {
+  background: #f8fafc;
+  color: #334155;
+}
+
+.project-modal-submit {
+  background: #2f7fd8;
+  color: #ffffff;
+  border: 1px solid #2f7fd8;
+  font-weight: 600;
+  box-shadow: 0 6px 14px rgba(47, 127, 216, 0.18);
+}
+
+.project-modal-submit:hover {
+  background: #1e6cc4;
+  border-color: #1e6cc4;
+  color: #ffffff;
+}
+
+.project-detail-page .project-progress-inline {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.project-detail-page .project-progress-value {
+  font-size: 3.2rem;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  color: #0f172a;
+}
+
+.project-detail-page .project-progress-track {
+  flex: 1 1 auto;
+  min-width: 180px;
+  width: 100%;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dbe3ef;
+  display: block;
+}
+
+.project-detail-page .project-progress-fill {
+  width: var(--progress-value, 0%);
+  height: 100%;
+  min-width: 0;
+  border-radius: 999px;
+  background: #94aeca;
+  display: block;
+}
+
+.project-detail-page .project-progress-fill.has-value {
+  min-width: 8px;
+}
+
+.project-detail-page .project-stat-card {
+  min-height: 88px;
+  border: 1px solid #dbe6f3;
+  border-radius: 14px;
+  background: var(--project-soft-blue);
+  padding: 18px 18px 14px;
+}
+
+.project-detail-page .project-tabs-shell {
+  margin-top: 8px;
+}
+
+.project-detail-page .project-kanban-board {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 24px;
+}
+
+.project-detail-page .project-kanban-column-wrap {
+  width: 255px;
+  flex: 0 0 255px;
+}
+
+.project-detail-page .project-kanban-column {
+  min-height: 340px;
+  border-radius: 16px;
+  border: 1px solid #dbe3ef;
+  background: #f7f9fc;
+}
+
+.project-detail-page .project-task-card {
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.project-detail-page .project-task-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 1;
+  visibility: visible;
+}
+
+.project-detail-page .project-task-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #dbe3ef;
+  visibility: visible;
+}
+
+.project-detail-page .project-task-edit-btn:hover {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.project-detail-page .project-task-edit-btn svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+}
+
+.project-detail-page .project-task-priority {
+  display: inline-flex;
+  align-items: center;
+  background: var(--project-chip-yellow);
+  color: #111827;
+  padding: 4px 10px;
+  line-height: 1;
+}
+
+.project-detail-page .project-empty-column {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+@media (max-width: 1279px) {
+  .project-detail-page .project-hero-top,
+  .project-detail-page .project-summary-layout {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .project-detail-page .project-hero-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 1023px) {
+  .project-detail-page .project-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .project-detail-page .project-hero-shell {
+    margin-left: -16px;
+    margin-right: -16px;
+    margin-top: -16px;
+  }
+
+  .project-detail-page .project-hero-band {
+    min-height: auto;
+  }
+
+  .project-detail-page .project-hero-float {
+    position: static;
+    margin-top: 14px;
+    padding-top: 14px;
+  }
+
+  .project-detail-page .project-meta-grid,
+  .project-detail-page .project-summary-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .project-detail-page .project-progress-inline {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .project-detail-page .project-progress-value {
+    font-size: 2.8rem;
+  }
+
+  .project-detail-page .project-progress-track {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .project-detail-page .project-kanban-column-wrap {
+    width: 265px;
+    flex-basis: 265px;
+  }
+
+  .project-detail-page .project-summary-card {
+    margin-top: 0;
+  }
+
+  .project-modal {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .project-modal-panel {
+    max-height: calc(100vh - 24px);
+    margin-top: 0;
+  }
+
+  .project-modal-body {
+    max-height: calc(100vh - 96px);
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
+.kanban-column {
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+.kanban-column.is-drop-target {
+  border-color: rgba(59,130,246,0.5);
+  background-color: #e8f2ff;
+  box-shadow: inset 0 0 0 1px rgba(59,130,246,0.25);
+}
+.kanban-task.is-dragging {
+  opacity: 0.4;
+  transform: rotate(1.5deg) scale(0.97);
+}
+.kanban-drop-skeleton {
+  border: 1.5px dashed rgba(148,163,184,0.7);
+  border-radius: 14px;
+  height: 90px;
+  background: linear-gradient(90deg, rgba(226,232,240,0.6) 25%, rgba(241,245,249,0.9) 50%, rgba(226,232,240,0.6) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.1s linear infinite;
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+</style>
+
+
+<!-- ══════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════ -->
+<script>
+const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+let draggedTaskId = null;
+let skeletonEl = null;
+
+/* ── Tabs ── */
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.remove('border-[#2F7FD8]', 'text-[#2F7FD8]');
+    b.classList.add('border-transparent', 'text-slate-500');
+  });
+  document.getElementById('panel-' + name).classList.remove('hidden');
+  const btn = document.getElementById('tab-' + name);
+  btn.classList.add('border-[#2F7FD8]', 'text-[#2F7FD8]');
+  btn.classList.remove('border-transparent', 'text-slate-500');
+}
+
+async function submitUpdatePanelForm(form) {
+  const panel = document.getElementById('panel-atualizacoes');
+  if (!panel || !form) return;
+
+  const submitBtn = form.querySelector('[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+
+  try {
+    const response = await fetch(form.action, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRFToken': CSRF,
+      },
+      body: new FormData(form),
+      credentials: 'same-origin',
+    });
+    const data = await response.json();
+    if (data.panel_html) {
+      panel.innerHTML = data.panel_html;
+      panel.classList.remove('hidden');
+    }
+  } catch (error) {
+    window.location.reload();
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+document.addEventListener('submit', function (event) {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement)) return;
+  if (event.defaultPrevented) return;
+  if (!form.closest('#panel-atualizacoes')) return;
+  if (!form.hasAttribute('data-update-form')) return;
+  event.preventDefault();
+  submitUpdatePanelForm(form);
+});
+
+/* ── Drag & Drop ── */
+function refreshColumnCounts() {
+  document.querySelectorAll('[data-column]').forEach(col => {
+    const count = col.querySelectorAll('.kanban-task').length;
+    const badge = col.querySelector('.task-count');
+    if (badge) badge.textContent = '(' + count + ')';
+  });
+}
+
+function ensureEmptyStates() {
+  document.querySelectorAll('.kanban-column').forEach(col => {
+    const hasTask = col.querySelector('.kanban-task');
+    const empty = col.querySelector('.empty-column');
+    if (!hasTask && !empty) {
+      const el = document.createElement('div');
+      el.className = 'empty-column rounded-[14px] border border-dashed border-slate-300 bg-white/70 py-10 text-center text-sm text-slate-400';
+      el.textContent = 'Sem tarefas';
+      col.appendChild(el);
+    }
+    if (hasTask && empty) empty.remove();
+  });
+}
+
+function removeSkeleton() {
+  if (skeletonEl) { skeletonEl.remove(); skeletonEl = null; }
+}
+
+function removeDropStates() {
+  document.querySelectorAll('.kanban-column').forEach(c => c.classList.remove('is-drop-target'));
+  removeSkeleton();
+}
+
+function ensureSkeleton(col) {
+  if (!skeletonEl) {
+    skeletonEl = document.createElement('div');
+    skeletonEl.className = 'kanban-drop-skeleton';
+    skeletonEl.setAttribute('aria-hidden', 'true');
+  }
+  col.querySelector('.empty-column')?.remove();
+  if (skeletonEl.parentElement !== col) { skeletonEl.remove(); col.appendChild(skeletonEl); }
+}
+
+function onDragStart(event, taskId) {
+  draggedTaskId = taskId;
+  event.dataTransfer.effectAllowed = 'move';
+  requestAnimationFrame(() => document.getElementById('task-' + taskId)?.classList.add('is-dragging'));
+}
+
+function onDragEnd() {
+  document.getElementById('task-' + draggedTaskId)?.classList.remove('is-dragging');
+  removeDropStates();
+  draggedTaskId = null;
+  refreshColumnCounts();
+  ensureEmptyStates();
+}
+
+function onDragOver(event) {
+  event.preventDefault();
+  if (!draggedTaskId) return;
+  const col = event.currentTarget;
+  col.classList.add('is-drop-target');
+  ensureSkeleton(col);
+}
+
+function onDragEnter(event) {
+  if (!draggedTaskId) return;
+  const col = event.currentTarget;
+  col.classList.add('is-drop-target');
+  ensureSkeleton(col);
+}
+
+function onDragLeave(event) {
+  const col = event.currentTarget;
+  if (event.relatedTarget && col.contains(event.relatedTarget)) return;
+  col.classList.remove('is-drop-target');
+  if (skeletonEl?.parentElement === col) removeSkeleton();
+}
+
+function onDrop(event, newStatus) {
+  event.preventDefault();
+  if (!draggedTaskId) return;
+  const taskEl = document.getElementById('task-' + draggedTaskId);
+  if (!taskEl) return;
+  const col = event.currentTarget;
+  taskEl.classList.remove('is-dragging');
+  skeletonEl?.parentElement === col ? skeletonEl.replaceWith(taskEl) : col.appendChild(taskEl);
+  skeletonEl = null;
+  col.querySelector('.empty-column')?.remove();
+  removeDropStates();
+  refreshColumnCounts();
+  ensureEmptyStates();
+  fetch(`{% url 'projects:task_status' project.pk 0 %}`.replace('/0/', '/' + draggedTaskId + '/'), {
+    method: 'POST',
+    headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'status=' + newStatus,
+  }).catch(() => {});
+  draggedTaskId = null;
+}
+
+/* ── Editar tarefa ── */
+function openEditTask(id, title, description, status, priority, assigneeId, dueDate) {
+  document.getElementById('form-task-edit').action =
+    `{% url 'projects:task_edit' project.pk 0 %}`.replace('/0/', '/' + id + '/');
+  document.getElementById('edit-task-title').value = title;
+  document.getElementById('edit-task-description').value = description;
+  document.getElementById('edit-task-status').value = status;
+  document.getElementById('edit-task-priority').value = priority;
+  const sel = document.getElementById('edit-task-assignee');
+  if (sel) sel.value = assigneeId;
+  document.getElementById('edit-task-due_date').value = dueDate;
+  document.getElementById('modal-task-edit').classList.remove('hidden');
+}
+</script>
+{% endblock %}

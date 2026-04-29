@@ -112,11 +112,15 @@
     });
 
     document.addEventListener('submit', function (e) {
-      const btn = e.target.querySelector('[type="submit"]');
+      const form = e.target;
+      const btn = e.submitter || form.querySelector('[type="submit"]');
       if (!btn) return;
-      btn.disabled = true;
-      btn.dataset.originalText = btn.innerHTML;
-      btn.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>Aguarde...';
+      setTimeout(function () {
+        if (e.defaultPrevented) return;
+        btn.disabled = true;
+        btn.dataset.originalText = btn.innerHTML;
+        btn.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>Aguarde...';
+      }, 0);
     });
   </script>
   {% block extra_js %}{% endblock %}

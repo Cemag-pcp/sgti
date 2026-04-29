@@ -20,5 +20,6 @@ urlpatterns = [
     path('accounts/', include('apps.accounts.urls')),
     path('tickets/', include('apps.tickets.urls')),
     path('assets/', include('apps.assets.urls')),
+    path('projetos/', include('apps.projects.urls')),
     path('', RedirectView.as_view(url='/tickets/', permanent=False)),
 ]

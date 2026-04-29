@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     'apps.accounts',
     'apps.tickets',
     'apps.assets',
+    'apps.projects',
 ]
 
 MIDDLEWARE = [
