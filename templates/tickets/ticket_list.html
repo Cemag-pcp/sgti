@@ -191,6 +191,7 @@
                 <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex-1" data-inline-update="status">
                   {% csrf_token %}
                   <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <input type="hidden" name="resolved_at" value="{{ ticket.resolved_at|date:'Y-m-d\\TH:i' }}" data-inline-resolved-at>
                   <select name="status"
                     class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     data-inline-select onchange="this.form.requestSubmit()">
@@ -271,12 +272,107 @@
       }
     };
 
+    const nowLocalInputValue = () => {
+      const now = new Date();
+      const pad = (value) => String(value).padStart(2, '0');
+      return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    };
+
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/40 px-4';
+    modal.innerHTML = `
+      <div class="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-900">Confirmar resolucao</h3>
+            <p class="mt-1 text-sm text-gray-500">Confira a data e hora da resolucao antes de concluir o ticket.</p>
+          </div>
+          <button type="button" class="text-gray-400 hover:text-gray-600" data-status-modal-cancel>
+            <span class="sr-only">Fechar</span>
+            X
+          </button>
+        </div>
+        <div class="mt-5">
+          <label class="form-label">Data e hora da resolucao</label>
+          <input type="datetime-local" class="form-input" data-status-modal-input>
+          <p class="mt-2 hidden text-xs text-red-600" data-status-modal-error></p>
+        </div>
+        <div class="mt-6 flex justify-end gap-3">
+          <button type="button" class="btn-secondary" data-status-modal-cancel>Cancelar</button>
+          <button type="button" class="btn-primary" data-status-modal-confirm>Confirmar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const modalInput = modal.querySelector('[data-status-modal-input]');
+    const modalError = modal.querySelector('[data-status-modal-error]');
+    const modalConfirm = modal.querySelector('[data-status-modal-confirm]');
+    const modalCancelButtons = modal.querySelectorAll('[data-status-modal-cancel]');
+
+    let pendingStatusForm = null;
+
+    const openStatusModal = (form) => {
+      pendingStatusForm = form;
+      const resolvedAtInput = form.querySelector('[data-inline-resolved-at]');
+      modalError.classList.add('hidden');
+      modalInput.value = resolvedAtInput?.value || nowLocalInputValue();
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      modalInput.focus();
+    };
+
+    const closeStatusModal = () => {
+      pendingStatusForm = null;
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      modalError.classList.add('hidden');
+    };
+
+    modalConfirm.addEventListener('click', () => {
+      if (!pendingStatusForm) return;
+      if (!modalInput.value) {
+        modalError.textContent = 'Informe a data e hora da resolucao.';
+        modalError.classList.remove('hidden');
+        modalInput.focus();
+        return;
+      }
+
+      const resolvedAtInput = pendingStatusForm.querySelector('[data-inline-resolved-at]');
+      if (resolvedAtInput) {
+        resolvedAtInput.value = modalInput.value;
+      }
+      pendingStatusForm.dataset.skipResolvedModal = 'true';
+      const formToSubmit = pendingStatusForm;
+      closeStatusModal();
+      formToSubmit.requestSubmit();
+    });
+
+    modalCancelButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        if (pendingStatusForm) {
+          const select = pendingStatusForm.querySelector('[data-inline-select]');
+          if (select) {
+            select.value = select.dataset.previousValue ?? select.value;
+          }
+        }
+        closeStatusModal();
+      });
+    });
+
     document.querySelectorAll('form[data-inline-update]').forEach((form) => {
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
 
         const select = form.querySelector('[data-inline-select]');
         const previousValue = select.dataset.previousValue ?? select.value;
+
+        if (form.dataset.inlineUpdate === 'status' && !form.dataset.skipResolvedModal && select.value === 'RESOLVED') {
+          openStatusModal(form);
+          return;
+        }
+
+        form.dataset.skipResolvedModal = '';
         const formData = new FormData(form);
 
         select.disabled = true;
@@ -306,12 +402,17 @@
 
           if (form.dataset.inlineUpdate === 'status') {
             updateSlaBadge(form, payload);
+            const resolvedAtInput = form.querySelector('[data-inline-resolved-at]');
+            if (resolvedAtInput && payload.resolved_at) {
+              resolvedAtInput.value = payload.resolved_at.slice(0, 16);
+            }
           }
         } catch (error) {
           select.value = previousValue;
         } finally {
           select.disabled = false;
           select.classList.remove('opacity-60');
+          form.dataset.skipResolvedModal = '';
         }
       });
 

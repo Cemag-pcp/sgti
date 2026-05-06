@@ -21,6 +21,7 @@ urlpatterns = [
     path('<int:pk>/area/', views.TicketAreaUpdateView.as_view(), name='area'),
     path('<int:pk>/category/', views.TicketCategoryUpdateView.as_view(), name='category'),
     path('<int:pk>/priority/', views.TicketPriorityUpdateView.as_view(), name='priority'),
+    path('<int:pk>/resolved-at/', views.TicketResolvedAtUpdateView.as_view(), name='resolved_at'),
     path('<int:pk>/time-entries/add/', views.TimeEntryCreateView.as_view(), name='time_entry_add'),
     path('<int:pk>/observations/add/', views.ObservationCreateView.as_view(), name='observation_add'),
     path('config/sla/', views.SLAConfigView.as_view(), name='sla_config'),

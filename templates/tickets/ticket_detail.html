@@ -213,12 +213,49 @@
           <dt class="text-gray-400 text-xs uppercase tracking-wide mb-0.5">Aberto em</dt>
           <dd class="text-gray-700">{{ ticket.created_at|date:"d/m/Y H:i" }}</dd>
         </div>
-        {% if ticket.resolved_at %}
+        <div>
+          <dt class="text-gray-400 text-xs uppercase tracking-wide mb-0.5">Tombamento</dt>
+          <dd class="text-gray-700 font-mono">{% firstof ticket.asset.asset_tag ticket.asset_tag "-" %}</dd>
+        </div>
         <div>
           <dt class="text-gray-400 text-xs uppercase tracking-wide mb-0.5">Resolvido em</dt>
-          <dd class="text-gray-700">{{ ticket.resolved_at|date:"d/m/Y H:i" }}</dd>
+          {% if can_edit %}
+          <dd>
+            <div data-resolved-at-editor>
+              <div class="flex items-center gap-2" data-resolved-at-view>
+                <span class="text-gray-700" data-resolved-at-display>{{ ticket.resolved_at|date:"d/m/Y H:i"|default:"Nao definido" }}</span>
+                <button
+                  type="button"
+                  class="text-xs font-medium text-blue-600 hover:text-blue-700"
+                  data-resolved-at-toggle
+                >
+                  Editar
+                </button>
+              </div>
+              <form
+                method="post"
+                action="{% url 'tickets:resolved_at' ticket.pk %}"
+                class="mt-2 hidden items-center gap-2"
+                data-resolved-at-form
+              >
+                {% csrf_token %}
+                <input
+                  type="datetime-local"
+                  name="resolved_at"
+                  value="{{ ticket.resolved_at|date:'Y-m-d\\TH:i' }}"
+                  class="form-input text-sm"
+                  data-resolved-at-input
+                >
+                <button type="submit" class="btn-primary whitespace-nowrap">Salvar</button>
+                <button type="button" class="btn-secondary whitespace-nowrap" data-resolved-at-cancel>Cancelar</button>
+              </form>
+              <p class="mt-1 hidden text-xs text-red-600" data-resolved-at-error></p>
+            </div>
+          </dd>
+          {% else %}
+          <dd class="text-gray-700">{{ ticket.resolved_at|date:"d/m/Y H:i"|default:"Nao definido" }}</dd>
+          {% endif %}
         </div>
-        {% endif %}
       </dl>
     </div>
 
@@ -226,9 +263,10 @@
     {% if can_edit %}
     <div class="card">
       <h3 class="font-semibold text-gray-800 mb-3">Mudar status</h3>
-      <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex gap-2">
+      <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex gap-2" data-status-form>
         {% csrf_token %}
-        <select name="status" class="form-input flex-1">
+        <input type="hidden" name="resolved_at" value="{{ ticket.resolved_at|date:'Y-m-d\\TH:i' }}" data-status-resolved-at>
+        <select name="status" class="form-input flex-1" data-status-select>
           {% for value, label in ticket.STATUS_CHOICES %}
           <option value="{{ value }}" {% if ticket.status == value %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
@@ -271,4 +309,166 @@
   </div>
 
 </div>
+
+{% if can_edit %}
+<div class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/40 px-4" data-status-modal>
+  <div class="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h3 class="text-lg font-semibold text-gray-900">Confirmar resolucao</h3>
+        <p class="mt-1 text-sm text-gray-500">Confira a data e hora da resolucao antes de concluir o ticket.</p>
+      </div>
+      <button type="button" class="text-gray-400 hover:text-gray-600" data-status-modal-cancel>
+        <span class="sr-only">Fechar</span>
+        X
+      </button>
+    </div>
+
+    <div class="mt-5">
+      <label class="form-label">Data e hora da resolucao</label>
+      <input type="datetime-local" class="form-input" data-status-modal-input>
+      <p class="mt-2 hidden text-xs text-red-600" data-status-modal-error></p>
+    </div>
+
+    <div class="mt-6 flex justify-end gap-3">
+      <button type="button" class="btn-secondary" data-status-modal-cancel>Cancelar</button>
+      <button type="button" class="btn-primary" data-status-modal-confirm>Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const editor = document.querySelector('[data-resolved-at-editor]');
+    const statusForm = document.querySelector('[data-status-form]');
+    const statusSelect = statusForm?.querySelector('[data-status-select]');
+    const statusResolvedAt = statusForm?.querySelector('[data-status-resolved-at]');
+    const statusModal = document.querySelector('[data-status-modal]');
+    const statusModalInput = statusModal?.querySelector('[data-status-modal-input]');
+    const statusModalError = statusModal?.querySelector('[data-status-modal-error]');
+    const statusModalConfirm = statusModal?.querySelector('[data-status-modal-confirm]');
+    const statusModalCancelButtons = statusModal?.querySelectorAll('[data-status-modal-cancel]');
+
+    const nowLocalInputValue = () => {
+      const now = new Date();
+      const pad = (value) => String(value).padStart(2, '0');
+      return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    };
+
+    const openStatusModal = () => {
+      if (!statusModal || !statusModalInput) return;
+      statusModalError.classList.add('hidden');
+      statusModalInput.value = statusResolvedAt?.value || '{{ ticket.resolved_at|date:"Y-m-d\\TH:i" }}' || nowLocalInputValue();
+      statusModal.classList.remove('hidden');
+      statusModal.classList.add('flex');
+      statusModalInput.focus();
+    };
+
+    const closeStatusModal = () => {
+      if (!statusModal) return;
+      statusModal.classList.add('hidden');
+      statusModal.classList.remove('flex');
+      statusModalError.classList.add('hidden');
+    };
+
+    if (statusForm && statusSelect && statusResolvedAt && statusModal && statusModalInput) {
+      statusForm.addEventListener('submit', (event) => {
+        if (statusSelect.value !== 'RESOLVED') {
+          return;
+        }
+
+        event.preventDefault();
+        openStatusModal();
+      });
+
+      statusModalConfirm.addEventListener('click', () => {
+        if (!statusModalInput.value) {
+          statusModalError.textContent = 'Informe a data e hora da resolucao.';
+          statusModalError.classList.remove('hidden');
+          statusModalInput.focus();
+          return;
+        }
+
+        statusResolvedAt.value = statusModalInput.value;
+        closeStatusModal();
+        statusForm.submit();
+      });
+
+      statusModalCancelButtons.forEach((button) => {
+        button.addEventListener('click', closeStatusModal);
+      });
+    }
+
+    if (editor) {
+      const view = editor.querySelector('[data-resolved-at-view]');
+      const display = editor.querySelector('[data-resolved-at-display]');
+      const toggle = editor.querySelector('[data-resolved-at-toggle]');
+      const form = editor.querySelector('[data-resolved-at-form]');
+      const input = editor.querySelector('[data-resolved-at-input]');
+      const cancel = editor.querySelector('[data-resolved-at-cancel]');
+      const error = editor.querySelector('[data-resolved-at-error]');
+
+      let previousValue = input.value;
+      let previousDisplay = display.textContent;
+
+      const openEditor = () => {
+        error.classList.add('hidden');
+        form.classList.remove('hidden');
+        form.classList.add('flex');
+        view.classList.add('hidden');
+        input.focus();
+      };
+
+      const closeEditor = () => {
+        form.classList.add('hidden');
+        form.classList.remove('flex');
+        view.classList.remove('hidden');
+        error.classList.add('hidden');
+        input.value = previousValue;
+      };
+
+      toggle.addEventListener('click', openEditor);
+      cancel.addEventListener('click', closeEditor);
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        const formData = new FormData(form);
+        input.disabled = true;
+
+        try {
+          const response = await fetch(form.action, {
+            method: 'POST',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: formData,
+            credentials: 'same-origin',
+          });
+          const payload = await response.json();
+
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.error || 'resolved_at_update_failed');
+          }
+
+          previousValue = payload.resolved_at_input || '';
+          previousDisplay = payload.resolved_at_display || 'Nao definido';
+          input.value = previousValue;
+          display.textContent = previousDisplay;
+          if (statusResolvedAt) {
+            statusResolvedAt.value = previousValue;
+          }
+          closeEditor();
+        } catch (submitError) {
+          display.textContent = previousDisplay;
+          error.textContent = 'Nao foi possivel salvar a data e hora resolvida.';
+          error.classList.remove('hidden');
+        } finally {
+          input.disabled = false;
+        }
+      });
+    }
+  })();
+</script>
+{% endif %}
 {% endblock %}

@@ -6,7 +6,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.dateparse import parse_date
+from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.decorators import method_decorator
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
@@ -631,8 +631,30 @@ class TicketStatusView(TechnicianRequiredMixin, View):
         form = TicketStatusForm(request.POST, instance=ticket)
         if form.is_valid():
             updated = form.save(commit=False)
-            if updated.status == Ticket.RESOLVED and not ticket.resolved_at:
-                updated.resolved_at = timezone.now()
+            resolved_at_raw = request.POST.get('resolved_at', '').strip()
+            if updated.status == Ticket.RESOLVED:
+                if resolved_at_raw:
+                    resolved_at = parse_datetime(resolved_at_raw)
+                    if resolved_at is None:
+                        if is_ajax:
+                            return JsonResponse(
+                                {
+                                    'ok': False,
+                                    'error': 'invalid_resolved_at',
+                                    'status': old_status,
+                                    'status_display': ticket.get_status_display(),
+                                    'status_class': ticket.status_class(),
+                                },
+                                status=400,
+                            )
+                        messages.error(request, 'Data e hora informadas para resolucao sao invalidas.')
+                        return redirect('tickets:detail', pk=pk)
+
+                    if timezone.is_naive(resolved_at):
+                        resolved_at = timezone.make_aware(resolved_at, timezone.get_current_timezone())
+                    updated.resolved_at = resolved_at
+                elif not ticket.resolved_at:
+                    updated.resolved_at = timezone.now()
             if updated.status == Ticket.CLOSED and not ticket.closed_at:
                 updated.closed_at = timezone.now()
             updated.save(update_fields=['status', 'resolved_at', 'closed_at'])
@@ -836,6 +858,67 @@ class TicketPriorityUpdateView(TechnicianRequiredMixin, View):
         ):
             return redirect(next_url)
         return redirect('tickets:list')
+
+
+class TicketResolvedAtUpdateView(TechnicianRequiredMixin, View):
+    def post(self, request, pk):
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        ticket = get_object_or_404(Ticket, pk=pk)
+        if not ticket.can_edit(request.user):
+            raise PermissionDenied
+
+        resolved_at_raw = request.POST.get('resolved_at', '').strip()
+        if not resolved_at_raw:
+            resolved_at = None
+        else:
+            resolved_at = parse_datetime(resolved_at_raw)
+            if resolved_at is None:
+                if not is_ajax:
+                    messages.error(request, 'Data e hora informadas sao invalidas.')
+                if is_ajax:
+                    return JsonResponse(
+                        {
+                            'ok': False,
+                            'error': 'invalid_resolved_at',
+                            'resolved_at': ticket.resolved_at.isoformat() if ticket.resolved_at else None,
+                            'resolved_at_display': timezone.localtime(ticket.resolved_at).strftime('%d/%m/%Y %H:%M') if ticket.resolved_at else 'Nao definido',
+                        },
+                        status=400,
+                    )
+                return redirect('tickets:detail', pk=pk)
+
+            if timezone.is_naive(resolved_at):
+                resolved_at = timezone.make_aware(resolved_at, timezone.get_current_timezone())
+
+        old_resolved_at = ticket.resolved_at
+        ticket.resolved_at = resolved_at
+        ticket.save(update_fields=['resolved_at', 'updated_at'])
+
+        if old_resolved_at != resolved_at:
+            previous_label = timezone.localtime(old_resolved_at).strftime('%d/%m/%Y %H:%M') if old_resolved_at else 'Nao definido'
+            current_label = timezone.localtime(resolved_at).strftime('%d/%m/%Y %H:%M') if resolved_at else 'Nao definido'
+            StatusHistory.objects.create(
+                ticket=ticket,
+                changed_by=request.user,
+                old_status=ticket.status,
+                new_status=ticket.status,
+                old_assigned_to=ticket.assigned_to,
+                new_assigned_to=ticket.assigned_to,
+                comment=f'Data/hora de resolucao alterada de {previous_label} para {current_label}',
+            )
+
+        if not is_ajax:
+            messages.success(request, 'Data e hora de resolucao atualizadas.')
+            return redirect('tickets:detail', pk=pk)
+
+        return JsonResponse(
+            {
+                'ok': True,
+                'resolved_at': ticket.resolved_at.isoformat() if ticket.resolved_at else None,
+                'resolved_at_display': timezone.localtime(ticket.resolved_at).strftime('%d/%m/%Y %H:%M') if ticket.resolved_at else 'Nao definido',
+                'resolved_at_input': timezone.localtime(ticket.resolved_at).strftime('%Y-%m-%dT%H:%M') if ticket.resolved_at else '',
+            }
+        )
 
 
 class TimeEntryCreateView(TechnicianRequiredMixin, View):

@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import CustomUser, RequesterProfile
-from apps.tickets.models import BrowserPushSubscription, Device, Location, SLAConfig, Ticket, WhatsAppConversation
+from apps.tickets.models import BrowserPushSubscription, Device, Location, SLAConfig, StatusHistory, Ticket, WhatsAppConversation
 from apps.tickets.whatsapp import (
     WhatsAppAPIError,
     build_whatsapp_headers,
@@ -18,7 +18,7 @@ from apps.tickets.whatsapp import (
 from apps.tickets.webpush import get_vapid_private_key
 from apps.tickets.webpush import build_ticket_push_payload
 from apps.tickets.whatsapp_bot import process_incoming_whatsapp_message
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 
 class WhatsAppServiceTests(SimpleTestCase):
@@ -563,6 +563,19 @@ class TicketStatusInlineUpdateTests(TestCase):
         self.assertEqual(self.ticket.status, Ticket.RESOLVED)
         self.assertIsNotNone(self.ticket.resolved_at)
 
+    def test_assigned_technician_can_resolve_status_with_custom_timestamp(self):
+        self.client.force_login(self.technician)
+
+        response = self.client.post(
+            reverse('tickets:status', kwargs={'pk': self.ticket.pk}),
+            data={'status': Ticket.RESOLVED, 'resolved_at': '2026-05-05T16:40'},
+        )
+
+        self.assertRedirects(response, reverse('tickets:detail', kwargs={'pk': self.ticket.pk}), fetch_redirect_response=False)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, Ticket.RESOLVED)
+        self.assertEqual(timezone.localtime(self.ticket.resolved_at).strftime('%Y-%m-%d %H:%M'), '2026-05-05 16:40')
+
     def test_status_update_returns_json_for_ajax(self):
         self.client.force_login(self.technician)
 
@@ -578,6 +591,33 @@ class TicketStatusInlineUpdateTests(TestCase):
         self.assertEqual(response.json()['status_display'], 'Em andamento')
         self.assertIn('bg-yellow-100', response.json()['status_class'])
 
+    def test_status_update_accepts_custom_resolved_at_for_ajax(self):
+        self.client.force_login(self.technician)
+
+        response = self.client.post(
+            reverse('tickets:status', kwargs={'pk': self.ticket.pk}),
+            data={'status': Ticket.RESOLVED, 'resolved_at': '2026-05-05T16:40'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['ok'], True)
+        self.assertEqual(response.json()['status'], Ticket.RESOLVED)
+        self.assertEqual(response.json()['resolved_at'][:16], '2026-05-05T16:40')
+
+    def test_status_update_rejects_invalid_custom_resolved_at_for_ajax(self):
+        self.client.force_login(self.technician)
+
+        response = self.client.post(
+            reverse('tickets:status', kwargs={'pk': self.ticket.pk}),
+            data={'status': Ticket.RESOLVED, 'resolved_at': 'invalido'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['ok'], False)
+        self.assertEqual(response.json()['error'], 'invalid_resolved_at')
+
     def test_unassigned_technician_cannot_update_status(self):
         self.client.force_login(self.other_technician)
 
@@ -589,6 +629,110 @@ class TicketStatusInlineUpdateTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.ticket.refresh_from_db()
         self.assertEqual(self.ticket.status, Ticket.OPEN)
+
+
+class TicketResolvedAtInlineUpdateTests(TestCase):
+    def setUp(self):
+        self.supervisor = CustomUser.objects.create_user(
+            email='supervisor-resolved@example.com',
+            password='senha123',
+            full_name='Supervisor Resolved',
+            role=CustomUser.SUPERVISOR,
+            is_staff=True,
+        )
+        self.technician = CustomUser.objects.create_user(
+            email='tecnico-resolved@example.com',
+            password='senha123',
+            full_name='Tecnico Resolved',
+            role=CustomUser.TECHNICIAN,
+        )
+        self.other_technician = CustomUser.objects.create_user(
+            email='outro-resolved@example.com',
+            password='senha123',
+            full_name='Outro Tecnico Resolved',
+            role=CustomUser.TECHNICIAN,
+        )
+        self.requester = RequesterProfile.objects.create(
+            matricula='1004',
+            full_name='Solicitante Resolved',
+        )
+        self.location = Location.objects.create(name='Matriz Resolved')
+        self.device = Device.objects.create(name='Desktop Resolved')
+        self.ticket = Ticket.objects.create(
+            title='Chamado resolvido',
+            description='Descricao',
+            requester=self.requester,
+            assigned_to=self.technician,
+            status=Ticket.RESOLVED,
+            resolved_at=timezone.make_aware(datetime(2026, 5, 1, 14, 0)),
+        )
+
+    def test_assigned_technician_can_update_resolved_at(self):
+        self.client.force_login(self.technician)
+
+        response = self.client.post(
+            reverse('tickets:resolved_at', kwargs={'pk': self.ticket.pk}),
+            data={'resolved_at': '2026-05-02T09:30'},
+        )
+
+        self.assertRedirects(response, reverse('tickets:detail', kwargs={'pk': self.ticket.pk}), fetch_redirect_response=False)
+        self.ticket.refresh_from_db()
+        self.assertEqual(timezone.localtime(self.ticket.resolved_at).strftime('%Y-%m-%d %H:%M'), '2026-05-02 09:30')
+        history = StatusHistory.objects.latest('changed_at')
+        self.assertIn('Data/hora de resolucao alterada', history.comment)
+
+    def test_resolved_at_update_returns_json_for_ajax(self):
+        self.client.force_login(self.technician)
+
+        response = self.client.post(
+            reverse('tickets:resolved_at', kwargs={'pk': self.ticket.pk}),
+            data={'resolved_at': '2026-05-03T10:45'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['ok'], True)
+        self.assertEqual(response.json()['resolved_at_display'], '03/05/2026 10:45')
+        self.assertEqual(response.json()['resolved_at_input'], '2026-05-03T10:45')
+
+    def test_resolved_at_can_be_cleared(self):
+        self.client.force_login(self.supervisor)
+
+        response = self.client.post(
+            reverse('tickets:resolved_at', kwargs={'pk': self.ticket.pk}),
+            data={'resolved_at': ''},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.ticket.refresh_from_db()
+        self.assertIsNone(self.ticket.resolved_at)
+        self.assertEqual(response.json()['resolved_at_display'], 'Nao definido')
+
+    def test_invalid_resolved_at_returns_error_for_ajax(self):
+        self.client.force_login(self.technician)
+
+        response = self.client.post(
+            reverse('tickets:resolved_at', kwargs={'pk': self.ticket.pk}),
+            data={'resolved_at': 'invalido'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['ok'], False)
+        self.assertEqual(response.json()['error'], 'invalid_resolved_at')
+
+    def test_unassigned_technician_cannot_update_resolved_at(self):
+        self.client.force_login(self.other_technician)
+
+        response = self.client.post(
+            reverse('tickets:resolved_at', kwargs={'pk': self.ticket.pk}),
+            data={'resolved_at': '2026-05-02T09:30'},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.ticket.refresh_from_db()
+        self.assertEqual(timezone.localtime(self.ticket.resolved_at).strftime('%Y-%m-%d %H:%M'), '2026-05-01 14:00')
 
     def test_api_accepts_device_and_location_alias_fields(self):
         payload = {
