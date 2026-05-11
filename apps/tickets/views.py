@@ -167,6 +167,9 @@ class TicketListView(TechnicianRequiredMixin, ListView):
         assigned = self.request.GET.get('assigned')
         search = self.request.GET.get('q')
 
+        if not status and not assigned:
+            status = Ticket.OPEN
+
         if status:
             qs = qs.filter(status=status)
         if priority:
@@ -221,7 +224,7 @@ class TicketListView(TechnicianRequiredMixin, ListView):
                 'label': 'Abertos',
                 'count': base_qs.filter(status=Ticket.OPEN).count(),
                 'url': build_query(status=Ticket.OPEN, assigned=None),
-                'active': current_filters.get('status') == Ticket.OPEN,
+                'active': current_filters.get('status') == Ticket.OPEN or (not current_filters.get('status') and not current_filters.get('assigned')),
             },
             {
                 'label': 'Atribuidos a mim',
