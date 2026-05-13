@@ -26,7 +26,7 @@
     <div class="card">
       <div class="flex flex-wrap items-start gap-3 mb-3">
         <span class="badge {{ ticket.priority_class }} text-xs">{{ ticket.get_priority_display }}</span>
-        <span class="badge {{ ticket.status_class }} text-xs">{{ ticket.get_status_display }}</span>
+        <span class="badge {{ ticket.status_class }} text-xs" data-ticket-status-badge data-status-class="{{ ticket.status_class }}">{{ ticket.get_status_display }}</span>
         <span class="text-xs text-gray-400 font-mono ml-auto">{{ ticket.ticket_number }}</span>
       </div>
       <h2 class="text-xl font-bold text-gray-900 mb-3">{{ ticket.title }}</h2>
@@ -36,8 +36,7 @@
     <!-- Observações -->
     <div class="card">
       <h3 class="font-semibold text-gray-800 mb-4">Observações</h3>
-      {% if ticket.observations.all %}
-      <div class="space-y-4 mb-5">
+      <div id="obs-list" class="space-y-4 {% if ticket.observations.all %}mb-5{% endif %}">
         {% for obs in ticket.observations.all %}
         <div class="border-l-2 {% if obs.is_internal %}border-yellow-300 bg-yellow-50{% else %}border-blue-300 bg-blue-50{% endif %} pl-4 py-2 pr-3 rounded-r-lg">
           <div class="flex items-center gap-2 mb-1">
@@ -51,12 +50,12 @@
         </div>
         {% endfor %}
       </div>
-      {% else %}
-      <p class="text-gray-400 text-sm mb-4">Nenhuma observação ainda.</p>
+      {% if not ticket.observations.all %}
+      <p id="obs-empty" class="text-gray-400 text-sm mb-4">Nenhuma observação ainda.</p>
       {% endif %}
 
       {% if can_edit %}
-      <form method="post" action="{% url 'tickets:observation_add' ticket.pk %}">
+      <form method="post" action="{% url 'tickets:observation_add' ticket.pk %}" data-obs-form>
         {% csrf_token %}
         <textarea name="body" rows="3" placeholder="Adicionar observação..."
           class="form-input resize-none mb-2" required></textarea>
@@ -75,11 +74,10 @@
     <div class="card">
       <div class="flex items-center justify-between mb-4">
         <h3 class="font-semibold text-gray-800">Registros de tempo</h3>
-        <span class="text-sm text-gray-500">Total: <strong>{{ ticket.total_minutes }} min</strong></span>
+        <span class="text-sm text-gray-500">Total: <strong data-total-minutes>{{ ticket.total_minutes }}</strong> min</span>
       </div>
 
-      {% if ticket.time_entries.all %}
-      <div class="overflow-x-auto mb-4">
+      <div id="time-entries-wrapper" {% if not ticket.time_entries.all %}class="hidden"{% else %}class="overflow-x-auto mb-4"{% endif %}>
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-gray-100">
@@ -90,7 +88,7 @@
               <th class="table-th">Nota</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-50">
+          <tbody id="time-entries-tbody" class="divide-y divide-gray-50">
             {% for entry in ticket.time_entries.all %}
             <tr>
               <td class="table-td pl-0 text-gray-600">{{ entry.technician.full_name|default:"—" }}</td>
@@ -103,12 +101,12 @@
           </tbody>
         </table>
       </div>
-      {% else %}
-      <p class="text-gray-400 text-sm mb-4">Nenhum registro de tempo.</p>
+      {% if not ticket.time_entries.all %}
+      <p id="time-entries-empty" class="text-gray-400 text-sm mb-4">Nenhum registro de tempo.</p>
       {% endif %}
 
       {% if can_edit %}
-      <form method="post" action="{% url 'tickets:time_entry_add' ticket.pk %}" class="border-t border-gray-100 pt-4">
+      <form method="post" action="{% url 'tickets:time_entry_add' ticket.pk %}" class="border-t border-gray-100 pt-4" data-time-form>
         {% csrf_token %}
         <div class="grid grid-cols-2 gap-3 mb-3">
           <div>
@@ -203,7 +201,7 @@
         </div>
         <div>
           <dt class="text-gray-400 text-xs uppercase tracking-wide mb-0.5">Atribuído a</dt>
-          <dd class="text-gray-700">{{ ticket.assigned_to.full_name|default:"Não atribuído" }}</dd>
+          <dd class="text-gray-700" data-assigned-to-display>{{ ticket.assigned_to.full_name|default:"Não atribuído" }}</dd>
         </div>
         <div>
           <dt class="text-gray-400 text-xs uppercase tracking-wide mb-0.5">Prazo</dt>
@@ -280,7 +278,7 @@
     {% if is_supervisor %}
     <div class="card">
       <h3 class="font-semibold text-gray-800 mb-3">Delegar chamado</h3>
-      <form method="post" action="{% url 'tickets:assign' ticket.pk %}" class="flex gap-2">
+      <form method="post" action="{% url 'tickets:assign' ticket.pk %}" class="flex gap-2" data-assign-form>
         {% csrf_token %}
         <select name="assigned_to" class="form-input flex-1">
           <option value="">Não atribuído</option>
@@ -310,6 +308,12 @@
 
 </div>
 
+<div id="ajax-toast" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none" aria-live="polite"></div>
+<style>
+  @keyframes toast-in  { from { opacity: 0; transform: translateX(110%); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes toast-out { from { opacity: 1; transform: translateX(0); }    to { opacity: 0; transform: translateX(110%); } }
+</style>
+
 {% if can_edit %}
 <div class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/40 px-4" data-status-modal>
   <div class="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
@@ -338,137 +342,299 @@
 </div>
 
 <script>
-  (() => {
-    const editor = document.querySelector('[data-resolved-at-editor]');
-    const statusForm = document.querySelector('[data-status-form]');
-    const statusSelect = statusForm?.querySelector('[data-status-select]');
-    const statusResolvedAt = statusForm?.querySelector('[data-status-resolved-at]');
-    const statusModal = document.querySelector('[data-status-modal]');
-    const statusModalInput = statusModal?.querySelector('[data-status-modal-input]');
-    const statusModalError = statusModal?.querySelector('[data-status-modal-error]');
-    const statusModalConfirm = statusModal?.querySelector('[data-status-modal-confirm]');
-    const statusModalCancelButtons = statusModal?.querySelectorAll('[data-status-modal-cancel]');
+  (function () {
+    function esc(str) { return String(str == null ? '' : str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
-    const nowLocalInputValue = () => {
-      const now = new Date();
-      const pad = (value) => String(value).padStart(2, '0');
-      return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    };
+    function showToast(message, isError) {
+      var container = document.getElementById('ajax-toast');
+      if (!container) return;
+      var el = document.createElement('div');
+      el.style.cssText = [
+        'display:flex;align-items:center;gap:10px;',
+        'min-width:260px;max-width:320px;',
+        'padding:12px 16px;border-radius:12px;',
+        'box-shadow:0 8px 24px rgba(0,0,0,.18);',
+        'font-size:14px;font-weight:500;color:#fff;',
+        'pointer-events:auto;',
+        'animation:toast-in .3s cubic-bezier(.22,.68,0,1.2) forwards;',
+        'background:' + (isError ? '#dc2626' : '#16a34a') + ';',
+      ].join('');
+      var icon = document.createElement('span');
+      icon.textContent = isError ? '✕' : '✓';
+      icon.style.cssText = 'flex-shrink:0;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:rgba(255,255,255,.25);';
+      var text = document.createElement('span');
+      text.textContent = message;
+      el.appendChild(icon);
+      el.appendChild(text);
+      container.appendChild(el);
+      setTimeout(function () {
+        el.style.animation = 'toast-out .3s ease-in forwards';
+        el.addEventListener('animationend', function () { el.remove(); }, { once: true });
+      }, 3500);
+    }
 
-    const openStatusModal = () => {
+    function ajaxPost(url, formData) {
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: formData,
+        credentials: 'same-origin',
+      }).then(function (response) {
+        return response.json().then(function (payload) {
+          return { response: response, payload: payload };
+        });
+      });
+    }
+
+    // ── Status form ──────────────────────────────────────────────────────────
+    var statusForm = document.querySelector('[data-status-form]');
+    var statusSelect = statusForm && statusForm.querySelector('[data-status-select]');
+    var statusResolvedAt = statusForm && statusForm.querySelector('[data-status-resolved-at]');
+    var statusModal = document.querySelector('[data-status-modal]');
+    var statusModalInput = statusModal && statusModal.querySelector('[data-status-modal-input]');
+    var statusModalError = statusModal && statusModal.querySelector('[data-status-modal-error]');
+    var statusModalConfirm = statusModal && statusModal.querySelector('[data-status-modal-confirm]');
+    var statusModalCancelBtns = statusModal && statusModal.querySelectorAll('[data-status-modal-cancel]');
+    var statusBadge = document.querySelector('[data-ticket-status-badge]');
+
+    function nowLocalInputValue() {
+      var now = new Date();
+      var pad = function (v) { return String(v).padStart(2, '0'); };
+      return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    }
+
+    function openStatusModal() {
       if (!statusModal || !statusModalInput) return;
       statusModalError.classList.add('hidden');
-      statusModalInput.value = statusResolvedAt?.value || '{{ ticket.resolved_at|date:"Y-m-d\\TH:i" }}' || nowLocalInputValue();
+      statusModalInput.value = (statusResolvedAt && statusResolvedAt.value) || '{{ ticket.resolved_at|date:"Y-m-d\\TH:i" }}' || nowLocalInputValue();
       statusModal.classList.remove('hidden');
       statusModal.classList.add('flex');
       statusModalInput.focus();
-    };
+    }
 
-    const closeStatusModal = () => {
+    function closeStatusModal() {
       if (!statusModal) return;
       statusModal.classList.add('hidden');
       statusModal.classList.remove('flex');
-      statusModalError.classList.add('hidden');
-    };
+      if (statusModalError) statusModalError.classList.add('hidden');
+    }
+
+    function submitStatusForm() {
+      ajaxPost(statusForm.action, new FormData(statusForm)).then(function (result) {
+        var response = result.response, payload = result.payload;
+        if (!response.ok || !payload.ok) throw new Error(payload.error || 'error');
+        if (statusBadge) {
+          var oldCls = statusBadge.getAttribute('data-status-class');
+          if (oldCls) oldCls.split(' ').forEach(function (c) { if (c) statusBadge.classList.remove(c); });
+          statusBadge.setAttribute('data-status-class', payload.status_class);
+          payload.status_class.split(' ').forEach(function (c) { if (c) statusBadge.classList.add(c); });
+          statusBadge.textContent = payload.status_display;
+        }
+        if (statusSelect) statusSelect.value = payload.status;
+        showToast('Status atualizado.');
+      }).catch(function () {
+        showToast('Erro ao atualizar status.', true);
+      });
+    }
 
     if (statusForm && statusSelect && statusResolvedAt && statusModal && statusModalInput) {
-      statusForm.addEventListener('submit', (event) => {
-        if (statusSelect.value !== 'RESOLVED') {
-          return;
-        }
-
+      statusForm.addEventListener('submit', function (event) {
         event.preventDefault();
-        openStatusModal();
+        if (statusSelect.value === 'RESOLVED') {
+          openStatusModal();
+        } else {
+          submitStatusForm();
+        }
       });
 
-      statusModalConfirm.addEventListener('click', () => {
+      statusModalConfirm.addEventListener('click', function () {
         if (!statusModalInput.value) {
           statusModalError.textContent = 'Informe a data e hora da resolucao.';
           statusModalError.classList.remove('hidden');
           statusModalInput.focus();
           return;
         }
-
         statusResolvedAt.value = statusModalInput.value;
         closeStatusModal();
-        statusForm.submit();
+        submitStatusForm();
       });
 
-      statusModalCancelButtons.forEach((button) => {
-        button.addEventListener('click', closeStatusModal);
-      });
+      if (statusModalCancelBtns) {
+        statusModalCancelBtns.forEach(function (btn) { btn.addEventListener('click', closeStatusModal); });
+      }
     }
 
-    if (editor) {
-      const view = editor.querySelector('[data-resolved-at-view]');
-      const display = editor.querySelector('[data-resolved-at-display]');
-      const toggle = editor.querySelector('[data-resolved-at-toggle]');
-      const form = editor.querySelector('[data-resolved-at-form]');
-      const input = editor.querySelector('[data-resolved-at-input]');
-      const cancel = editor.querySelector('[data-resolved-at-cancel]');
-      const error = editor.querySelector('[data-resolved-at-error]');
-
-      let previousValue = input.value;
-      let previousDisplay = display.textContent;
-
-      const openEditor = () => {
-        error.classList.add('hidden');
-        form.classList.remove('hidden');
-        form.classList.add('flex');
-        view.classList.add('hidden');
-        input.focus();
-      };
-
-      const closeEditor = () => {
-        form.classList.add('hidden');
-        form.classList.remove('flex');
-        view.classList.remove('hidden');
-        error.classList.add('hidden');
-        input.value = previousValue;
-      };
-
-      toggle.addEventListener('click', openEditor);
-      cancel.addEventListener('click', closeEditor);
-
-      form.addEventListener('submit', async (event) => {
+    // ── Observation form ─────────────────────────────────────────────────────
+    var obsForm = document.querySelector('[data-obs-form]');
+    if (obsForm) {
+      obsForm.addEventListener('submit', function (event) {
         event.preventDefault();
-
-        const formData = new FormData(form);
-        input.disabled = true;
-
-        try {
-          const response = await fetch(form.action, {
-            method: 'POST',
-            headers: {
-              'X-Requested-With': 'XMLHttpRequest',
-            },
-            body: formData,
-            credentials: 'same-origin',
-          });
-          const payload = await response.json();
-
-          if (!response.ok || !payload.ok) {
-            throw new Error(payload.error || 'resolved_at_update_failed');
+        var btn = obsForm.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+        ajaxPost(obsForm.action, new FormData(obsForm)).then(function (result) {
+          if (!result.response.ok || !result.payload.ok) throw new Error();
+          var o = result.payload.observation;
+          var obsList = document.getElementById('obs-list');
+          var obsEmpty = document.getElementById('obs-empty');
+          if (obsEmpty) obsEmpty.remove();
+          if (obsList) {
+            obsList.classList.add('mb-5');
+            var borderCls = o.is_internal ? 'border-yellow-300 bg-yellow-50' : 'border-blue-300 bg-blue-50';
+            var div = document.createElement('div');
+            div.className = 'border-l-2 ' + borderCls + ' pl-4 py-2 pr-3 rounded-r-lg';
+            var header = document.createElement('div');
+            header.className = 'flex items-center gap-2 mb-1';
+            var authorEl = document.createElement('span');
+            authorEl.className = 'text-xs font-medium text-gray-700';
+            authorEl.textContent = o.author;
+            var dateEl = document.createElement('span');
+            dateEl.className = 'text-xs text-gray-400';
+            dateEl.textContent = o.created_at;
+            header.appendChild(authorEl);
+            header.appendChild(dateEl);
+            if (o.is_internal) {
+              var badge = document.createElement('span');
+              badge.className = 'text-xs bg-yellow-200 text-yellow-700 px-1.5 py-0.5 rounded';
+              badge.textContent = 'Interna';
+              header.appendChild(badge);
+            }
+            var body = document.createElement('p');
+            body.className = 'text-sm text-gray-700 whitespace-pre-wrap';
+            body.textContent = o.body;
+            div.appendChild(header);
+            div.appendChild(body);
+            obsList.appendChild(div);
           }
-
-          previousValue = payload.resolved_at_input || '';
-          previousDisplay = payload.resolved_at_display || 'Nao definido';
-          input.value = previousValue;
-          display.textContent = previousDisplay;
-          if (statusResolvedAt) {
-            statusResolvedAt.value = previousValue;
-          }
-          closeEditor();
-        } catch (submitError) {
-          display.textContent = previousDisplay;
-          error.textContent = 'Nao foi possivel salvar a data e hora resolvida.';
-          error.classList.remove('hidden');
-        } finally {
-          input.disabled = false;
-        }
+          var textarea = obsForm.querySelector('textarea[name="body"]');
+          if (textarea) textarea.value = '';
+          showToast('Observação adicionada.');
+        }).catch(function () {
+          showToast('Erro ao adicionar observação.', true);
+        }).finally(function () {
+          if (btn) btn.disabled = false;
+        });
       });
     }
-  })();
+
+    // ── Time entry form ──────────────────────────────────────────────────────
+    var timeForm = document.querySelector('[data-time-form]');
+    if (timeForm) {
+      timeForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var btn = timeForm.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+        ajaxPost(timeForm.action, new FormData(timeForm)).then(function (result) {
+          if (!result.response.ok || !result.payload.ok) throw new Error();
+          var e = result.payload.entry;
+          var wrapper = document.getElementById('time-entries-wrapper');
+          var tbody = document.getElementById('time-entries-tbody');
+          var empty = document.getElementById('time-entries-empty');
+          if (empty) empty.remove();
+          if (wrapper) wrapper.className = 'overflow-x-auto mb-4';
+          if (tbody) {
+            var tr = document.createElement('tr');
+            var cells = [
+              { cls: 'table-td pl-0 text-gray-600', text: e.technician },
+              { cls: 'table-td', text: e.started_at },
+              { cls: 'table-td', text: e.ended_at },
+              { cls: 'table-td', text: e.duration_minutes + ' min' },
+              { cls: 'table-td text-gray-400 truncate max-w-xs', text: e.notes },
+            ];
+            cells.forEach(function (c) {
+              var td = document.createElement('td');
+              td.className = c.cls;
+              td.textContent = c.text;
+              tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+          }
+          var totalEl = document.querySelector('[data-total-minutes]');
+          if (totalEl) totalEl.textContent = result.payload.total_minutes;
+          ['started_at', 'ended_at', 'duration_minutes', 'notes'].forEach(function (name) {
+            var inp = timeForm.querySelector('[name="' + name + '"]');
+            if (inp) inp.value = '';
+          });
+          showToast('Registro de tempo adicionado.');
+        }).catch(function () {
+          showToast('Erro ao registrar tempo. Verifique os campos.', true);
+        }).finally(function () {
+          if (btn) btn.disabled = false;
+        });
+      });
+    }
+
+    // ── Assign form ──────────────────────────────────────────────────────────
+    var assignForm = document.querySelector('[data-assign-form]');
+    if (assignForm) {
+      assignForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var btn = assignForm.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+        ajaxPost(assignForm.action, new FormData(assignForm)).then(function (result) {
+          if (!result.response.ok || !result.payload.ok) throw new Error();
+          var display = document.querySelector('[data-assigned-to-display]');
+          if (display) display.textContent = result.payload.assigned_to_name;
+          showToast('Chamado delegado com sucesso.');
+        }).catch(function () {
+          showToast('Erro ao delegar chamado.', true);
+        }).finally(function () {
+          if (btn) btn.disabled = false;
+        });
+      });
+    }
+
+    // ── Resolved-at inline editor ────────────────────────────────────────────
+    var editor = document.querySelector('[data-resolved-at-editor]');
+    if (editor) {
+      var raView = editor.querySelector('[data-resolved-at-view]');
+      var raDisplay = editor.querySelector('[data-resolved-at-display]');
+      var raToggle = editor.querySelector('[data-resolved-at-toggle]');
+      var raForm = editor.querySelector('[data-resolved-at-form]');
+      var raInput = editor.querySelector('[data-resolved-at-input]');
+      var raCancel = editor.querySelector('[data-resolved-at-cancel]');
+      var raError = editor.querySelector('[data-resolved-at-error]');
+      var raPrevValue = raInput ? raInput.value : '';
+      var raPrevDisplay = raDisplay ? raDisplay.textContent : '';
+
+      function openEditor() {
+        if (raError) raError.classList.add('hidden');
+        if (raForm) { raForm.classList.remove('hidden'); raForm.classList.add('flex'); }
+        if (raView) raView.classList.add('hidden');
+        if (raInput) raInput.focus();
+      }
+
+      function closeEditor() {
+        if (raForm) { raForm.classList.add('hidden'); raForm.classList.remove('flex'); }
+        if (raView) raView.classList.remove('hidden');
+        if (raError) raError.classList.add('hidden');
+        if (raInput) raInput.value = raPrevValue;
+      }
+
+      if (raToggle) raToggle.addEventListener('click', openEditor);
+      if (raCancel) raCancel.addEventListener('click', closeEditor);
+
+      if (raForm) {
+        raForm.addEventListener('submit', function (event) {
+          event.preventDefault();
+          if (raInput) raInput.disabled = true;
+          ajaxPost(raForm.action, new FormData(raForm)).then(function (result) {
+            if (!result.response.ok || !result.payload.ok) throw new Error(result.payload.error || 'error');
+            raPrevValue = result.payload.resolved_at_input || '';
+            raPrevDisplay = result.payload.resolved_at_display || 'Nao definido';
+            if (raInput) raInput.value = raPrevValue;
+            if (raDisplay) raDisplay.textContent = raPrevDisplay;
+            if (statusResolvedAt) statusResolvedAt.value = raPrevValue;
+            closeEditor();
+          }).catch(function () {
+            if (raDisplay) raDisplay.textContent = raPrevDisplay;
+            if (raError) { raError.textContent = 'Nao foi possivel salvar.'; raError.classList.remove('hidden'); }
+          }).finally(function () {
+            if (raInput) raInput.disabled = false;
+          });
+        });
+      }
+    }
+  }());
 </script>
 {% endif %}
 {% endblock %}

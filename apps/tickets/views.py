@@ -606,6 +606,7 @@ class TicketUpdateView(TechnicianRequiredMixin, UpdateView):
 
 class TicketAssignView(SupervisorRequiredMixin, View):
     def post(self, request, pk):
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         ticket = get_object_or_404(Ticket, pk=pk)
         form = TicketAssignForm(request.POST, instance=ticket)
         if form.is_valid():
@@ -620,7 +621,14 @@ class TicketAssignView(SupervisorRequiredMixin, View):
                 old_assigned_to=old_assigned,
                 new_assigned_to=updated.assigned_to,
             )
+            if is_ajax:
+                return JsonResponse({
+                    'ok': True,
+                    'assigned_to_name': updated.assigned_to.full_name if updated.assigned_to else 'Não atribuído',
+                })
             messages.success(request, 'Chamado delegado com sucesso.')
+        elif is_ajax:
+            return JsonResponse({'ok': False, 'error': 'invalid_form'}, status=400)
         return redirect('tickets:detail', pk=pk)
 
 
@@ -926,6 +934,7 @@ class TicketResolvedAtUpdateView(TechnicianRequiredMixin, View):
 
 class TimeEntryCreateView(TechnicianRequiredMixin, View):
     def post(self, request, pk):
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         ticket = get_object_or_404(Ticket, pk=pk)
         if not ticket.can_edit(request.user):
             raise PermissionDenied
@@ -935,14 +944,30 @@ class TimeEntryCreateView(TechnicianRequiredMixin, View):
             entry.ticket = ticket
             entry.technician = request.user
             entry.save()
+            if is_ajax:
+                ticket.refresh_from_db()
+                return JsonResponse({
+                    'ok': True,
+                    'entry': {
+                        'technician': entry.technician.full_name if entry.technician else '—',
+                        'started_at': timezone.localtime(entry.started_at).strftime('%d/%m/%Y %H:%M') if entry.started_at else '—',
+                        'ended_at': timezone.localtime(entry.ended_at).strftime('%d/%m/%Y %H:%M') if entry.ended_at else '—',
+                        'duration_minutes': str(entry.duration_minutes) if entry.duration_minutes is not None else '—',
+                        'notes': entry.notes or '—',
+                    },
+                    'total_minutes': ticket.total_minutes,
+                })
             messages.success(request, 'Registro de tempo adicionado.')
         else:
+            if is_ajax:
+                return JsonResponse({'ok': False, 'error': 'invalid_form'}, status=400)
             messages.error(request, 'Erro ao registrar tempo. Verifique os campos.')
         return redirect('tickets:detail', pk=pk)
 
 
 class ObservationCreateView(TechnicianRequiredMixin, View):
     def post(self, request, pk):
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         ticket = get_object_or_404(Ticket, pk=pk)
         if not ticket.can_edit(request.user):
             raise PermissionDenied
@@ -952,7 +977,19 @@ class ObservationCreateView(TechnicianRequiredMixin, View):
             obs.ticket = ticket
             obs.author = request.user
             obs.save()
+            if is_ajax:
+                return JsonResponse({
+                    'ok': True,
+                    'observation': {
+                        'body': obs.body,
+                        'author': obs.author.full_name if obs.author else 'Sistema',
+                        'created_at': timezone.localtime(obs.created_at).strftime('%d/%m/%Y %H:%M'),
+                        'is_internal': obs.is_internal,
+                    },
+                })
             messages.success(request, 'Observação adicionada.')
+        elif is_ajax:
+            return JsonResponse({'ok': False, 'error': 'invalid_form'}, status=400)
         return redirect('tickets:detail', pk=pk)
 
 
