@@ -16,6 +16,8 @@ from urllib.parse import urlencode
 import json
 import logging
 
+from apps.tickets.utils import business_hours_between
+
 from apps.core.mixins import TechnicianRequiredMixin, SupervisorRequiredMixin
 from apps.accounts.models import CustomUser, RequesterProfile
 from .models import Ticket, TimeEntry, TicketObservation, StatusHistory, SLAConfig, Location, Device, BrowserPushSubscription
@@ -299,7 +301,7 @@ class TicketReportsView(TechnicianRequiredMixin, View):
         if date_from > date_to:
             date_from, date_to = date_to, date_from
 
-        qs = Ticket.objects.select_related('location', 'requester', 'assigned_to').filter(
+        qs = Ticket.objects.select_related('location', 'requester', 'assigned_to').prefetch_related('time_entries').filter(
             created_at__date__gte=date_from,
             created_at__date__lte=date_to,
         )
@@ -344,10 +346,17 @@ class TicketReportsView(TechnicianRequiredMixin, View):
         sla_compliance_rate = round((completed_on_time_count / sla_tracked_completed) * 100, 1) if sla_tracked_completed else 0
         tickets_per_day = round(len(tickets) / ((date_to - date_from).days + 1), 1)
 
+        def ticket_resolution_hours(ticket):
+            entries = ticket.time_entries.all()
+            total_min = sum(e.duration_minutes for e in entries if e.duration_minutes is not None)
+            if total_min:
+                return round(total_min / 60, 1)
+            end = completion_at(ticket)
+            return business_hours_between(ticket.created_at, end) if end else None
+
         resolution_hours = [
-            round((completion_at(ticket) - ticket.created_at).total_seconds() / 3600, 1)
-            for ticket in completed_tickets
-            if completion_at(ticket)
+            h for ticket in completed_tickets
+            if (h := ticket_resolution_hours(ticket)) is not None
         ]
         avg_resolution_hours = round(sum(resolution_hours) / len(resolution_hours), 1) if resolution_hours else 0
 
