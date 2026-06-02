@@ -204,6 +204,7 @@ class Ticket(models.Model):
     closed_at = models.DateTimeField(null=True, blank=True, verbose_name='Fechado em')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Aberto em')
     updated_at = models.DateTimeField(auto_now=True)
+    is_hidden = models.BooleanField(default=False, verbose_name='Oculto')
 
     class Meta:
         verbose_name = 'Chamado'

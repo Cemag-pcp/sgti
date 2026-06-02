@@ -154,7 +154,7 @@ class TicketListView(TechnicianRequiredMixin, ListView):
     paginate_by = 20
 
     def _base_queryset(self):
-        qs = Ticket.objects.select_related('requester', 'assigned_to', 'location', 'device')
+        qs = Ticket.objects.select_related('requester', 'assigned_to', 'location', 'device').filter(is_hidden=False)
         user = self.request.user
         if user.role == 'TECHNICIAN':
             qs = qs.filter(Q(assigned_to=user) | Q(assigned_to__isnull=True))
@@ -304,6 +304,7 @@ class TicketReportsView(TechnicianRequiredMixin, View):
         qs = Ticket.objects.select_related('location', 'requester', 'assigned_to').prefetch_related('time_entries').filter(
             created_at__date__gte=date_from,
             created_at__date__lte=date_to,
+            is_hidden=False,
         )
 
         area = request.GET.get('area', '').strip()
@@ -576,7 +577,7 @@ class TicketDetailView(TechnicianRequiredMixin, DetailView):
     context_object_name = 'ticket'
 
     def get_queryset(self):
-        return Ticket.objects.select_related(
+        return Ticket.objects.filter(is_hidden=False).select_related(
             'requester', 'assigned_to', 'created_by', 'asset', 'location', 'device'
         ).prefetch_related('observations__author', 'time_entries__technician', 'status_history__changed_by')
 
@@ -1002,6 +1003,22 @@ class ObservationCreateView(TechnicianRequiredMixin, View):
         return redirect('tickets:detail', pk=pk)
 
 
+class TicketHideView(SupervisorRequiredMixin, View):
+    def post(self, request, pk):
+        ticket = get_object_or_404(Ticket, pk=pk)
+        ticket.is_hidden = True
+        ticket.save(update_fields=['is_hidden', 'updated_at'])
+        messages.success(request, f'Chamado {ticket.ticket_number} excluído.')
+        next_url = request.POST.get('next', '').strip()
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return redirect(next_url)
+        return redirect('tickets:list')
+
+
 class SLAConfigView(SupervisorRequiredMixin, View):
     """Tela única que exibe e salva todas as prioridades de SLA de uma vez."""
     template_name = 'tickets/sla_config.html'
@@ -1240,7 +1257,7 @@ class TicketNotificationsPollView(TechnicianRequiredMixin, View):
 
         new_tickets = (
             Ticket.objects
-            .filter(created_at__gt=since)
+            .filter(created_at__gt=since, is_hidden=False)
             .order_by('created_at')
             .values('id', 'ticket_number', 'title', 'priority', 'created_at')
         )

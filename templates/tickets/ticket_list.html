@@ -126,9 +126,26 @@
                   <span class="badge {{ ticket.priority_class }}">{{ ticket.get_priority_display }}</span>
                   {% endif %}
                 </div>
-                <a href="{% url 'tickets:detail' ticket.pk %}" class="rounded-xl border border-gray-200 p-2 text-gray-400 hover:bg-gray-50 hover:text-gray-600">
-                  Mais detalhes
-                </a>
+                <div class="flex items-center gap-1">
+                  {% if request.user.is_supervisor %}
+                  <button type="button"
+                    class="rounded-xl border border-transparent p-2 text-gray-300 hover:border-red-100 hover:bg-red-50 hover:text-red-500 transition-colors"
+                    data-delete-ticket
+                    data-ticket-pk="{{ ticket.pk }}"
+                    data-ticket-number="{{ ticket.ticket_number }}"
+                    data-ticket-title="{{ ticket.title }}"
+                    data-next="{{ request.get_full_path }}"
+                    title="Excluir chamado">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
+                  {% endif %}
+                  <a href="{% url 'tickets:detail' ticket.pk %}" class="rounded-xl border border-gray-200 p-2 text-gray-400 hover:bg-gray-50 hover:text-gray-600">
+                    Mais detalhes
+                  </a>
+                </div>
               </div>
 
               <div class="mt-4">
@@ -358,6 +375,83 @@
         }
         closeStatusModal();
       });
+    });
+
+    // Modal de exclusão de ticket
+    const deleteModal = document.createElement('div');
+    deleteModal.className = 'fixed inset-0 z-50 hidden items-center justify-center bg-black/50 px-4';
+    deleteModal.innerHTML = `
+      <div class="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+        <div class="flex items-start gap-4">
+          <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-red-50 border border-red-100">
+            <svg class="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16"/>
+            </svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <h3 class="text-lg font-semibold text-gray-900">Excluir chamado</h3>
+            <p class="mt-1 text-sm text-gray-500" data-delete-modal-info></p>
+          </div>
+          <button type="button" class="text-gray-400 hover:text-gray-600" data-delete-modal-cancel>
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <p class="mt-4 text-sm text-gray-500">O chamado será removido da lista e não entrará em nenhum indicador. O registro é mantido internamente.</p>
+        <div class="mt-6 flex justify-end gap-3">
+          <button type="button" class="btn-secondary" data-delete-modal-cancel>Cancelar</button>
+          <button type="button" class="btn-danger" data-delete-modal-confirm>Confirmar exclusão</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(deleteModal);
+
+    const deleteModalInfo = deleteModal.querySelector('[data-delete-modal-info]');
+    const deleteModalConfirm = deleteModal.querySelector('[data-delete-modal-confirm]');
+    const deleteModalCancelBtns = deleteModal.querySelectorAll('[data-delete-modal-cancel]');
+
+    const deleteForm = document.createElement('form');
+    deleteForm.method = 'post';
+    deleteForm.style.display = 'none';
+    const deleteCsrf = document.createElement('input');
+    deleteCsrf.type = 'hidden';
+    deleteCsrf.name = 'csrfmiddlewaretoken';
+    deleteCsrf.value = document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? '';
+    const deleteNext = document.createElement('input');
+    deleteNext.type = 'hidden';
+    deleteNext.name = 'next';
+    deleteForm.appendChild(deleteCsrf);
+    deleteForm.appendChild(deleteNext);
+    document.body.appendChild(deleteForm);
+
+    const openDeleteModal = (btn) => {
+      const pk = btn.dataset.ticketPk;
+      const number = btn.dataset.ticketNumber;
+      const title = btn.dataset.ticketTitle;
+      const next = btn.dataset.next;
+      deleteModalInfo.textContent = `Tem certeza que deseja excluir o chamado ${number} — "${title}"?`;
+      deleteForm.action = `/tickets/${pk}/hide/`;
+      deleteNext.value = next;
+      deleteModal.classList.remove('hidden');
+      deleteModal.classList.add('flex');
+    };
+
+    const closeDeleteModal = () => {
+      deleteModal.classList.add('hidden');
+      deleteModal.classList.remove('flex');
+    };
+
+    deleteModalConfirm.addEventListener('click', () => {
+      deleteForm.submit();
+    });
+
+    deleteModalCancelBtns.forEach((btn) => btn.addEventListener('click', closeDeleteModal));
+    deleteModal.addEventListener('click', (e) => { if (e.target === deleteModal) closeDeleteModal(); });
+
+    document.querySelectorAll('[data-delete-ticket]').forEach((btn) => {
+      btn.addEventListener('click', () => openDeleteModal(btn));
     });
 
     document.querySelectorAll('form[data-inline-update]').forEach((form) => {
