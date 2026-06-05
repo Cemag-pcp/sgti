@@ -346,6 +346,8 @@ class TicketReportsView(TechnicianRequiredMixin, View):
         sla_tracked_completed = completed_on_time_count + completed_late_count
         sla_compliance_rate = round((completed_on_time_count / sla_tracked_completed) * 100, 1) if sla_tracked_completed else 0
         tickets_per_day = round(len(tickets) / ((date_to - date_from).days + 1), 1)
+        total_tickets = len(tickets)
+        closure_rate = round((completed_count / total_tickets) * 100, 1) if total_tickets else 0
 
         def ticket_resolution_hours(ticket):
             entries = ticket.time_entries.all()
@@ -520,6 +522,12 @@ class TicketReportsView(TechnicianRequiredMixin, View):
                     'value': f'{avg_resolution_hours}h',
                     'caption': 'Média do tempo entre abertura e conclusão',
                     'tone': 'teal',
+                },
+                {
+                    'title': 'Taxa de encerramento',
+                    'value': f'{closure_rate}%',
+                    'caption': f'{completed_count} encerrados de {total_tickets} abertos no período',
+                    'tone': 'sky',
                 },
             ],
             'daily_chart': daily_chart,
