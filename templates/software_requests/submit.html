@@ -1,0 +1,143 @@
+{% extends "base_public.html" %}
+
+{% block title %}Solicitar Software — SGTI{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+  <div class="flex items-center gap-3 mb-2">
+    <div class="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
+      <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M9.75 3.104v5.714a2.143 2.143 0 01-2.143 2.143H3.321m6.429-7.857a48.714 48.714 0 018.25 0m-8.25 0v5.714a2.143 2.143 0 002.143 2.143h4.286m0 0V3.104m0 7.857h4.286a2.143 2.143 0 002.143-2.143V3.104"/>
+      </svg>
+    </div>
+    <div>
+      <h1 class="text-xl font-bold text-gray-900">Solicitar novo software</h1>
+      <p class="text-gray-500 text-sm">Preencha o formulário para solicitar a assinatura de um software externo.</p>
+    </div>
+  </div>
+
+  <div class="mt-5 mb-6 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+    Sua solicitação será analisada pela equipe de TI. Você será notificado sobre o andamento.
+  </div>
+
+  {% include "partials/flash_messages.html" %}
+
+  <form method="post" class="space-y-5">
+    {% csrf_token %}
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="form-label">Matrícula *</label>
+        <input type="text" name="matricula" id="id_matricula"
+          value="{{ form.matricula.value|default:'' }}"
+          placeholder="Ex: 12345"
+          class="form-input {% if form.matricula.errors %}border-red-400{% endif %}"
+          required>
+        {% if form.matricula.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ form.matricula.errors.0 }}</p>
+        {% endif %}
+        <p class="mt-1 text-xs text-gray-400">Matrícula corporativa do responsável</p>
+      </div>
+      <div>
+        <label class="form-label">Nome do responsável *</label>
+        <input type="text" name="requester_name" id="id_requester_name"
+          value="{% if known_requester %}{{ known_requester.full_name }}{% else %}{{ form.requester_name.value|default:'' }}{% endif %}"
+          placeholder="Nome completo"
+          class="form-input {% if form.requester_name.errors %}border-red-400{% endif %}"
+          required>
+        <p id="matricula-hint" class="mt-1 text-xs text-red-600 hidden">Matrícula não encontrada, preencha seu nome.</p>
+        {% if form.requester_name.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ form.requester_name.errors.0 }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div>
+      <label class="form-label">Setor *</label>
+      <input type="text" name="setor" id="id_setor"
+        value="{{ form.setor.value|default:'' }}"
+        placeholder="Ex: Financeiro, Recursos Humanos, Produção..."
+        class="form-input {% if form.setor.errors %}border-red-400{% endif %}"
+        required>
+      {% if form.setor.errors %}
+      <p class="mt-1 text-xs text-red-600">{{ form.setor.errors.0 }}</p>
+      {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="form-label">Nome do software *</label>
+        <input type="text" name="software_name" id="id_software_name"
+          value="{{ form.software_name.value|default:'' }}"
+          placeholder="Ex: Monday, Slack, Notion, Adobe..."
+          class="form-input {% if form.software_name.errors %}border-red-400{% endif %}"
+          required>
+        {% if form.software_name.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ form.software_name.errors.0 }}</p>
+        {% endif %}
+      </div>
+      <div>
+        <label class="form-label">Site do software</label>
+        <input type="url" name="software_url" id="id_software_url"
+          value="{{ form.software_url.value|default:'' }}"
+          placeholder="https://..."
+          class="form-input {% if form.software_url.errors %}border-red-400{% endif %}">
+        <p class="mt-1 text-xs text-gray-400">Opcional</p>
+        {% if form.software_url.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ form.software_url.errors.0 }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div>
+      <label class="form-label">Motivo / Justificativa *</label>
+      <textarea name="reason" rows="5"
+        placeholder="Descreva o motivo da aquisição, quais processos serão beneficiados, quantos usuários utilizarão o software e quaisquer outras informações relevantes..."
+        class="form-input resize-none {% if form.reason.errors %}border-red-400{% endif %}"
+        required>{{ form.reason.value|default:'' }}</textarea>
+      {% if form.reason.errors %}
+      <p class="mt-1 text-xs text-red-600">{{ form.reason.errors.0 }}</p>
+      {% endif %}
+    </div>
+
+    <button type="submit" class="btn-primary w-full justify-center py-3 text-base">
+      Enviar solicitação
+    </button>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const matriculaInput = document.getElementById('id_matricula');
+  const nameInput = document.getElementById('id_requester_name');
+  const matriculaHint = document.getElementById('matricula-hint');
+
+  function lookupMatricula(matricula) {
+    if (!matricula) return;
+    fetch(`/tickets/api/requester-lookup/?matricula=${encodeURIComponent(matricula)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.found) {
+          nameInput.value = data.full_name;
+          nameInput.readOnly = true;
+          matriculaHint.classList.add('hidden');
+        } else {
+          nameInput.value = '';
+          nameInput.readOnly = false;
+          matriculaHint.classList.remove('hidden');
+        }
+      });
+  }
+
+  if (matriculaInput) {
+    matriculaInput.addEventListener('blur', function () {
+      lookupMatricula(this.value.trim());
+    });
+    if (matriculaInput.value.trim()) {
+      lookupMatricula(matriculaInput.value.trim());
+    }
+  }
+</script>
+{% endblock %}

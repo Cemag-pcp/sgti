@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     'apps.tickets',
     'apps.assets',
     'apps.projects',
+    'apps.software_requests',
 ]
 
 MIDDLEWARE = [
