@@ -876,6 +876,166 @@ class LastTicketByMatriculaApiTests(TestCase):
         self.assertEqual(body['location']['description'], 'Planejamento')
 
 
+class TicketPublicPortalTests(TestCase):
+    def setUp(self):
+        self.location = Location.objects.create(name='PCP', description='Planejamento')
+        self.device = Device.objects.create(name='Notebook')
+        self.requester = RequesterProfile.objects.create(
+            matricula='4357',
+            full_name='Teste Usuario',
+        )
+
+    def test_submit_route_loads_public_portal(self):
+        response = self.client.get(reverse('tickets:submit'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'tickets/ticket_portal.html')
+        self.assertContains(response, 'Abrir novo chamado')
+        self.assertContains(response, 'Visualizar chamados')
+        self.assertContains(response, reverse('tickets:submit_new'))
+
+    def test_submit_new_route_loads_existing_form(self):
+        response = self.client.get(reverse('tickets:submit_new'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'tickets/ticket_submit.html')
+        self.assertContains(response, 'Abrir chamado de TI')
+
+    def test_submit_new_creates_ticket_and_redirects_to_form(self):
+        response = self.client.post(
+            reverse('tickets:submit_new'),
+            {
+                'matricula': self.requester.matricula,
+                'requester_name': self.requester.full_name,
+                'title': 'Notebook sem ligar',
+                'description': 'O equipamento nao liga desde cedo.',
+                'category': Ticket.HARDWARE,
+                'priority': Ticket.MEDIUM,
+                'location': self.location.pk,
+                'device': self.device.pk,
+                'asset_tag': '',
+            },
+        )
+
+        self.assertRedirects(response, reverse('tickets:submit_new'), fetch_redirect_response=False)
+        self.assertTrue(Ticket.objects.filter(title='Notebook sem ligar', requester=self.requester).exists())
+
+
+class TicketHistoryByMatriculaApiTests(TestCase):
+    def setUp(self):
+        self.location = Location.objects.create(name='PCP', description='Planejamento')
+        self.device = Device.objects.create(name='Notebook')
+        self.requester = RequesterProfile.objects.create(
+            matricula='4357',
+            full_name='Teste Usuario',
+        )
+
+    def test_api_returns_error_when_matricula_is_missing(self):
+        response = self.client.get(reverse('tickets:api_history'))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json(),
+            {'found': False, 'error': 'missing_matricula', 'tickets': []},
+        )
+
+    def test_api_returns_empty_list_when_requester_has_no_tickets(self):
+        response = self.client.get(
+            reverse('tickets:api_history'),
+            {'matricula': '9999'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'found': False, 'tickets': []})
+
+    def test_api_rejects_status_outside_public_filter_options(self):
+        response = self.client.get(
+            reverse('tickets:api_history'),
+            {'matricula': self.requester.matricula, 'status': Ticket.WAITING},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json(),
+            {'found': False, 'error': 'invalid_status', 'tickets': []},
+        )
+
+    def test_api_returns_visible_tickets_ordered_by_newest_first(self):
+        older_ticket = Ticket.objects.create(
+            requester=self.requester,
+            title='Chamado antigo',
+            description='Descricao antiga',
+            location=self.location,
+            device=self.device,
+            priority=Ticket.MEDIUM,
+            category=Ticket.SOFTWARE,
+        )
+        latest_ticket = Ticket.objects.create(
+            requester=self.requester,
+            title='Chamado recente',
+            description='Descricao recente',
+            location=self.location,
+            device=self.device,
+            priority=Ticket.HIGH,
+            category=Ticket.NETWORK,
+        )
+        hidden_ticket = Ticket.objects.create(
+            requester=self.requester,
+            title='Chamado oculto',
+            description='Descricao oculta',
+            location=self.location,
+            device=self.device,
+            is_hidden=True,
+        )
+        Ticket.objects.filter(pk=older_ticket.pk).update(created_at=timezone.now() - timedelta(days=2))
+        Ticket.objects.filter(pk=latest_ticket.pk).update(created_at=timezone.now() - timedelta(days=1))
+        Ticket.objects.filter(pk=hidden_ticket.pk).update(created_at=timezone.now())
+
+        response = self.client.get(
+            reverse('tickets:api_history'),
+            {'matricula': self.requester.matricula},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body['found'])
+        self.assertEqual([ticket['id'] for ticket in body['tickets']], [latest_ticket.id, older_ticket.id])
+        self.assertEqual(body['tickets'][0]['ticket_number'], latest_ticket.ticket_number)
+        self.assertEqual(body['tickets'][0]['title'], 'Chamado recente')
+        self.assertEqual(body['tickets'][0]['description'], 'Descricao recente')
+        self.assertEqual(body['tickets'][0]['status_display'], latest_ticket.get_status_display())
+        self.assertEqual(body['tickets'][0]['detail_url'], reverse('tickets:detail', kwargs={'pk': latest_ticket.pk}))
+        self.assertNotIn(hidden_ticket.id, [ticket['id'] for ticket in body['tickets']])
+
+    def test_api_filters_history_by_open_or_resolved_status(self):
+        open_ticket = Ticket.objects.create(
+            requester=self.requester,
+            title='Chamado aberto',
+            description='Descricao aberta',
+            location=self.location,
+            device=self.device,
+            status=Ticket.OPEN,
+        )
+        Ticket.objects.create(
+            requester=self.requester,
+            title='Chamado resolvido',
+            description='Descricao resolvida',
+            location=self.location,
+            device=self.device,
+            status=Ticket.RESOLVED,
+        )
+
+        response = self.client.get(
+            reverse('tickets:api_history'),
+            {'matricula': self.requester.matricula, 'status': Ticket.OPEN},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual([ticket['id'] for ticket in body['tickets']], [open_ticket.id])
+        self.assertEqual(body['tickets'][0]['status'], Ticket.OPEN)
+
+
 class TicketNotificationsPollTests(TestCase):
     def setUp(self):
         self.user = CustomUser.objects.create_user(

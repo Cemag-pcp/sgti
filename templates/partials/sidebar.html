@@ -32,7 +32,7 @@
       </svg>
       <span class="sidebar-label">Todos os chamados</span>
     </a>
-    <a href="{% url 'tickets:submit' %}" title="Abrir chamado"
+    <a href="{% url 'tickets:submit_new' %}" title="Abrir chamado"
       class="{% if request.resolver_match.url_name == 'submit' %}nav-link-active{% else %}nav-link{% endif %}">
       <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
