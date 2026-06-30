@@ -4,8 +4,8 @@
   "description": "",
   "main": "tailwind.config.js",
   "scripts": {
-    "tw:build": "tailwindcss -i ./static/src/input.css -o ./static/dist/output.css --minify",
-    "tw:watch": "tailwindcss -i ./static/src/input.css -o ./static/dist/output.css --watch"
+    "tw:build": "node ./node_modules/tailwindcss/lib/cli.js -i ./static/src/input.css -o ./static/dist/output.css --minify",
+    "tw:watch": "node ./node_modules/tailwindcss/lib/cli.js -i ./static/src/input.css -o ./static/dist/output.css --watch"
   },
   "keywords": [],
   "author": "",

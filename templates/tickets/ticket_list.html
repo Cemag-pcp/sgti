@@ -5,7 +5,7 @@
 {% block page_title %}Chamados{% endblock %}
 
 {% block header_actions %}
-<a href="{% url 'tickets:submit' %}" class="btn-primary">
+<a href="{% url 'tickets:submit_new' %}" class="btn-primary">
   <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
   </svg>
@@ -235,7 +235,7 @@
               d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/>
           </svg>
           <p class="font-medium text-gray-400">Nenhum chamado encontrado</p>
-          <p class="mt-1 text-sm text-gray-300">Ajuste os filtros ou <a href="{% url 'tickets:submit' %}" class="text-blue-500">abra um novo chamado</a></p>
+          <p class="mt-1 text-sm text-gray-300">Ajuste os filtros ou <a href="{% url 'tickets:submit_new' %}" class="text-blue-500">abra um novo chamado</a></p>
         </div>
         {% endif %}
       </div>

@@ -5,6 +5,7 @@ app_name = 'tickets'
 
 urlpatterns = [
     path('api/devices/', views.DeviceListApiView.as_view(), name='api_devices'),
+    path('api/history/', views.TicketHistoryByMatriculaApiView.as_view(), name='api_history'),
     path('api/last-ticket/', views.LastTicketByMatriculaApiView.as_view(), name='api_last_ticket'),
     path('api/push/subscription/', views.PushSubscriptionView.as_view(), name='push_subscription'),
     path('api/open/', views.TicketCreateApiView.as_view(), name='api_open'),
@@ -12,7 +13,8 @@ urlpatterns = [
     path('webhooks/whatsapp/', views.WhatsAppWebhookView.as_view(), name='whatsapp_webhook'),
     path('', views.TicketListView.as_view(), name='list'),
     path('reports/', views.TicketReportsView.as_view(), name='reports'),
-    path('submit/', views.TicketSubmitView.as_view(), name='submit'),
+    path('submit/', views.TicketPortalView.as_view(), name='submit'),
+    path('submit/new/', views.TicketSubmitView.as_view(), name='submit_new'),
     path('submit/requester-lookup/', views.RequesterLookupView.as_view(), name='requester_lookup'),
     path('<int:pk>/', views.TicketDetailView.as_view(), name='detail'),
     path('<int:pk>/edit/', views.TicketUpdateView.as_view(), name='edit'),

@@ -10,7 +10,7 @@ from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.decorators import method_decorator
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
-from django.views.generic import ListView, DetailView, CreateView, UpdateView, View
+from django.views.generic import ListView, DetailView, CreateView, UpdateView, View, TemplateView
 from datetime import timedelta
 from urllib.parse import urlencode
 import json
@@ -89,6 +89,48 @@ class LastTicketByMatriculaApiView(View):
                 ),
             }
         )
+
+
+class TicketHistoryByMatriculaApiView(View):
+    http_method_names = ['get']
+
+    def get(self, request, *args, **kwargs):
+        matricula = request.GET.get('matricula', '').strip()
+        if not matricula:
+            return JsonResponse(
+                {'found': False, 'error': 'missing_matricula', 'tickets': []},
+                status=400,
+            )
+
+        status_filter = request.GET.get('status', '').strip()
+        allowed_statuses = {Ticket.OPEN, Ticket.RESOLVED}
+        if status_filter and status_filter not in allowed_statuses:
+            return JsonResponse(
+                {'found': False, 'error': 'invalid_status', 'tickets': []},
+                status=400,
+            )
+
+        tickets = Ticket.objects.filter(requester__matricula=matricula, is_hidden=False)
+        if status_filter:
+            tickets = tickets.filter(status=status_filter)
+        tickets = tickets.select_related('requester').order_by('-created_at')
+
+        results = [
+            {
+                'id': ticket.id,
+                'ticket_number': ticket.ticket_number,
+                'title': ticket.title,
+                'description': ticket.description,
+                'status': ticket.status,
+                'status_display': ticket.get_status_display(),
+                'status_class': ticket.status_class(),
+                'created_at': ticket.created_at.isoformat(),
+                'created_at_display': timezone.localtime(ticket.created_at).strftime('%d/%m/%Y %H:%M'),
+                'detail_url': reverse('tickets:detail', kwargs={'pk': ticket.pk}),
+            }
+            for ticket in tickets
+        ]
+        return JsonResponse({'found': bool(results), 'tickets': results})
 
 
 class DeviceListApiView(View):
@@ -540,6 +582,11 @@ class TicketReportsView(TechnicianRequiredMixin, View):
         return render(request, self.template_name, context)
 
 
+class TicketPortalView(TemplateView):
+    """Entrada publica para abrir ou consultar chamados."""
+    template_name = 'tickets/ticket_portal.html'
+
+
 class TicketSubmitView(CreateView):
     """Formulário público — não exige login."""
     template_name = 'tickets/ticket_submit.html'
@@ -576,7 +623,7 @@ class TicketSubmitView(CreateView):
         if ticket is None:
             return self.form_invalid(form)
         messages.success(self.request, f'Chamado {ticket.ticket_number} aberto com sucesso!')
-        return redirect('tickets:submit')
+        return redirect('tickets:submit_new')
 
 
 class TicketDetailView(TechnicianRequiredMixin, DetailView):
