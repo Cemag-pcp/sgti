@@ -37,6 +37,21 @@ body > .flex.h-screen.overflow-hidden > .flex-1.flex.flex-col.overflow-hidden > 
           </div>
 
           <div class="project-hero-actions flex flex-wrap items-center gap-2 xl:justify-end">
+            {% if can_manage_project %}
+            <form method="post" action="{% url 'projects:status_update' project.pk %}"
+                  class="project-hero-chip is-status project-status-form inline-flex items-center gap-1.5 rounded-full bg-[#156ec6] px-3.5 py-1.5 text-sm font-medium text-white shadow-[0_4px_10px_rgba(21,110,198,0.18)]">
+              {% csrf_token %}
+              <svg class="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8 7V3m8 4V3m-9 8h10m-11 9h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v11a2 2 0 002 2z"/>
+              </svg>
+              <select name="status" onchange="this.form.submit()" class="project-status-select bg-transparent text-sm font-medium text-white focus:outline-none">
+                {% for val, label in project.STATUS_CHOICES %}
+                <option value="{{ val }}" {% if val == project.status %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </form>
+            {% else %}
             <span class="project-hero-chip is-status inline-flex items-center gap-1.5 rounded-full bg-[#156ec6] px-3.5 py-1.5 text-sm font-medium text-white shadow-[0_4px_10px_rgba(21,110,198,0.18)]">
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -44,6 +59,7 @@ body > .flex.h-screen.overflow-hidden > .flex-1.flex.flex-col.overflow-hidden > 
               </svg>
               {{ project.get_status_display }}
             </span>
+            {% endif %}
 
             <span class="project-hero-chip is-priority inline-flex items-center gap-1.5 rounded-full bg-[#f7c74f] px-3.5 py-1.5 text-sm font-medium text-slate-900 shadow-[0_4px_10px_rgba(247,199,79,0.22)]">
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -211,93 +227,7 @@ body > .flex.h-screen.overflow-hidden > .flex-1.flex.flex-col.overflow-hidden > 
     {% endif %}
 
     <!-- Board Kanban -->
-    <div class="project-kanban-board flex gap-3 overflow-x-auto pb-6" id="kanban-board">
-      {% for status_key, status_label, col_tasks in kanban_columns %}
-      <div class="project-kanban-column-wrap w-[255px] flex-shrink-0" data-column="{{ status_key }}">
-
-        <!-- Título da coluna com contagem inline: "Backlog (1)" -->
-        <h3 class="project-kanban-heading task-count-header mb-2 px-1 text-[0.98rem] font-semibold text-slate-800">
-          {{ status_label }} <span class="task-count">({{ col_tasks|length }})</span>
-        </h3>
-
-        <!-- Área de drop da coluna -->
-        <div class="project-kanban-column kanban-column min-h-[340px] space-y-3 rounded-[16px] border border-slate-200 bg-[#f7f9fc] p-3"
-             data-status="{{ status_key }}"
-             {% if can_manage_project %}
-             ondragover="onDragOver(event)"
-             ondragenter="onDragEnter(event)"
-             ondragleave="onDragLeave(event)"
-             ondrop="onDrop(event, '{{ status_key }}')"
-             {% endif %}
-             style="box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);">
-
-          {% for task in col_tasks %}
-          <!-- Card de tarefa -->
-          <div class="project-task-card kanban-task group rounded-[14px] border border-slate-200 bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(15,23,42,0.1)] {% if can_manage_project %}cursor-grab active:cursor-grabbing{% endif %}"
-               {% if can_manage_project %}
-               draggable="true"
-               ondragstart="onDragStart(event, {{ task.pk }})"
-               ondragend="onDragEnd()"
-               {% endif %}
-               id="task-{{ task.pk }}">
-
-            <!-- Título + ações de hover -->
-            <div class="mb-3 flex items-start justify-between gap-2">
-              <p class="text-[0.98rem] font-medium leading-7 text-slate-900">{{ task.title }}</p>
-              {% if can_manage_project %}
-              <div class="project-task-actions flex flex-shrink-0 items-center gap-1 opacity-100 transition-opacity">
-                <button type="button"
-                        onclick="openEditTask({{ task.pk }}, '{{ task.title|escapejs }}', '{{ task.description|escapejs }}', '{{ task.status }}', '{{ task.priority }}', '{{ task.assignee_id|default:"" }}', '{{ task.due_date|date:"Y-m-d"|default:"" }}')"
-                        class="project-task-edit-btn rounded-lg p-1 text-slate-300 transition-colors hover:text-blue-600" title="Editar">
-                  <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                  </svg>
-                </button>
-                <form method="post" action="{% url 'projects:task_delete' project.pk task.pk %}"
-                      class="inline" onsubmit="return confirm('Remover esta tarefa?')">
-                  {% csrf_token %}
-                  <button type="submit" class="rounded-lg p-1 text-slate-300 transition-colors hover:text-red-600" title="Remover">
-                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                  </button>
-                </form>
-              </div>
-              {% endif %}
-            </div>
-
-            <!-- Rodapé do card: prioridade (esq.) | data + avatar (dir.) -->
-            <div class="flex items-center justify-between">
-              <!-- Selo de prioridade -->
-              <span class="project-task-priority inline-flex items-center rounded-full bg-[#f7c74f] px-2.5 py-0.5 text-[0.8rem] font-medium text-slate-900">
-                {{ task.get_priority_display }}
-              </span>
-              <!-- Data + responsável -->
-              <div class="flex items-center gap-2 text-[0.82rem] text-slate-400">
-                {% if task.due_date %}
-                <span class="{% if task.is_overdue %}font-medium text-red-600{% endif %}">{{ task.due_date|date:"d/m" }}</span>
-                {% endif %}
-                {% if task.assignee %}
-                <div class="flex h-6 w-6 items-center justify-center rounded-full bg-[#7aa8e7] text-[11px] font-bold text-white"
-                     title="{{ task.assignee.full_name }}">
-                  {{ task.assignee.full_name|first|upper }}
-                </div>
-                {% endif %}
-              </div>
-            </div>
-
-          </div>
-          {% empty %}
-          <div class="project-empty-column empty-column rounded-[14px] border border-dashed border-slate-300 bg-white/70 py-10 text-center text-sm text-slate-400">
-            Sem tarefas
-          </div>
-          {% endfor %}
-
-        </div><!-- /kanban-column -->
-      </div>
-      {% endfor %}
-    </div><!-- /kanban-board -->
+    {% include "projects/partials/kanban_board.html" %}
 
   </div><!-- /panel-tarefas -->
 
@@ -305,78 +235,9 @@ body > .flex.h-screen.overflow-hidden > .flex-1.flex.flex-col.overflow-hidden > 
        PAINEL: MEMBROS
   ══════════════════════════════════════════ -->
   <div id="panel-membros" class="tab-panel hidden">
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
 
-      <!-- Lista de membros -->
-      <div class="lg:col-span-2">
-        <div class="px-1">
-          <h3 class="mb-4 font-semibold text-slate-900">Membros do projeto</h3>
-          <div class="divide-y divide-slate-100">
-            {% for member in project.members.all %}
-            <div class="flex items-center justify-between px-4 py-3.5">
-              <div class="flex items-center gap-3">
-                <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white
-                  {% if member.role == 'MANAGER' %}bg-blue-500{% elif member.role == 'MEMBER' %}bg-indigo-400{% else %}bg-slate-400{% endif %}">
-                  {{ member.user.full_name|first|upper }}
-                </div>
-                <div>
-                  <p class="text-sm font-medium text-slate-900">{{ member.user.full_name }}</p>
-                  <p class="text-xs text-slate-400">{{ member.user.email }}</p>
-                </div>
-              </div>
-              <div class="flex items-center gap-3">
-                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
-                  {% if member.role == 'MANAGER' %}bg-blue-100 text-blue-800
-                  {% elif member.role == 'MEMBER' %}bg-indigo-100 text-indigo-800
-                  {% else %}bg-slate-100 text-slate-600{% endif %}">
-                  {{ member.get_role_display }}
-                </span>
-                {% if can_manage_project %}
-                <form method="post" action="{% url 'projects:member_remove' project.pk member.pk %}"
-                      onsubmit="return confirm('Remover {{ member.user.full_name }} do projeto?')">
-                  {% csrf_token %}
-                  <button type="submit" class="text-slate-300 transition-colors hover:text-red-500" title="Remover">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                  </button>
-                </form>
-                {% endif %}
-              </div>
-            </div>
-            {% empty %}
-            <div class="px-4 py-10 text-center text-sm text-slate-400">Nenhum membro cadastrado</div>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
+    {% include "projects/partials/members_panel.html" %}
 
-      <!-- Formulário adicionar membro -->
-      {% if can_manage_project %}
-      <div class="lg:col-span-1">
-        <div class="rounded-[24px] border border-slate-200 bg-white p-5">
-          <h3 class="mb-4 font-semibold text-slate-900">Adicionar membro</h3>
-          <form method="post" action="{% url 'projects:member_add' project.pk %}" class="space-y-4">
-            {% csrf_token %}
-            {% for field in member_form %}
-            <div>
-              <label class="mb-1 block text-sm font-medium text-slate-700">{{ field.label }}</label>
-              {{ field }}
-              {% if field.errors %}
-              <p class="mt-1 text-xs text-red-600">{{ field.errors|join:", " }}</p>
-              {% endif %}
-            </div>
-            {% endfor %}
-            <button type="submit"
-                    class="project-member-submit w-full rounded-xl bg-[#2F7FD8] py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1e6cc4]">
-              Adicionar
-            </button>
-          </form>
-        </div>
-      </div>
-      {% endif %}
-
-    </div>
   </div><!-- /panel-membros -->
 
   <!-- ══════════════════════════════════════════
@@ -405,8 +266,9 @@ body > .flex.h-screen.overflow-hidden > .flex-1.flex.flex-col.overflow-hidden > 
         </svg>
       </button>
     </div>
-    <form method="post" action="{% url 'projects:task_create' project.pk %}" class="project-modal-body space-y-4 px-6 py-5">
+    <form method="post" action="{% url 'projects:task_create' project.pk %}" class="project-modal-body space-y-4 px-6 py-5" data-ajax-form="task-create">
       {% csrf_token %}
+      <div data-form-errors class="hidden rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"></div>
       {% for field in task_form %}
       <div>
         <label class="mb-1 block text-sm font-medium text-slate-700">{{ field.label }}</label>
@@ -444,8 +306,9 @@ body > .flex.h-screen.overflow-hidden > .flex-1.flex.flex-col.overflow-hidden > 
         </svg>
       </button>
     </div>
-    <form id="form-task-edit" method="post" action="" class="project-modal-body space-y-4 px-6 py-5">
+    <form id="form-task-edit" method="post" action="" class="project-modal-body space-y-4 px-6 py-5" data-ajax-form="task-edit">
       {% csrf_token %}
+      <div data-form-errors class="hidden rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"></div>
       <div>
         <label class="mb-1 block text-sm font-medium text-slate-700">Título <span class="text-red-500">*</span></label>
         <input type="text" name="title" id="edit-task-title"
@@ -499,6 +362,46 @@ body > .flex.h-screen.overflow-hidden > .flex-1.flex.flex-col.overflow-hidden > 
         <button type="submit"
                 class="project-modal-submit rounded-xl bg-[#2F7FD8] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1e6cc4]">
           Salvar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     MODAL: ADICIONAR MEMBRO
+══════════════════════════════════════════ -->
+<div id="modal-member-add" class="project-modal fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-black/50" onclick="document.getElementById('modal-member-add').classList.add('hidden')"></div>
+  <div class="project-modal-panel relative w-full max-w-md rounded-2xl bg-white shadow-2xl">
+    <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+      <h2 class="text-lg font-semibold text-slate-900">Adicionar membro</h2>
+      <button type="button" onclick="document.getElementById('modal-member-add').classList.add('hidden')"
+              class="text-slate-400 hover:text-slate-600">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <form method="post" action="{% url 'projects:member_add' project.pk %}" class="project-modal-body space-y-4 px-6 py-5" data-ajax-form="member-add">
+      {% csrf_token %}
+      <div data-form-errors class="hidden rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"></div>
+      {% for field in member_form %}
+      <div>
+        <label class="mb-1 block text-sm font-medium text-slate-700">{{ field.label }}</label>
+        {{ field }}
+        {% if field.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ field.errors|join:", " }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+      <div class="flex justify-end gap-3 pt-2">
+        <button type="button" onclick="document.getElementById('modal-member-add').classList.add('hidden')"
+                class="project-modal-cancel px-4 py-2 text-sm text-slate-500 hover:text-slate-700">Cancelar</button>
+        <button type="submit"
+                class="project-modal-submit rounded-xl bg-[#2F7FD8] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1e6cc4]">
+          Adicionar
         </button>
       </div>
     </form>
@@ -607,6 +510,18 @@ body > .flex.h-screen.overflow-hidden > .flex-1.flex.flex-col.overflow-hidden > 
 .project-detail-page .project-hero-chip.is-status {
   background: var(--project-chip-blue);
   color: #fff;
+}
+
+.project-detail-page .project-status-select {
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  appearance: none;
+}
+
+.project-detail-page .project-status-select option {
+  color: #111827;
+  background: #fff;
 }
 
 .project-detail-page .project-hero-chip.is-priority {
@@ -1083,6 +998,82 @@ document.addEventListener('submit', function (event) {
   if (!form.hasAttribute('data-update-form')) return;
   event.preventDefault();
   submitUpdatePanelForm(form);
+});
+
+/* ── Formulários AJAX genéricos (sem recarregar a página) ── */
+function showAjaxFormErrors(form, data) {
+  const box = form.querySelector('[data-form-errors]');
+  if (!box) { window.location.reload(); return; }
+  const messages = data.errors
+    ? Object.values(data.errors).flat()
+    : (data.error ? [data.error] : ['Ocorreu um erro. Tente novamente.']);
+  box.innerHTML = messages.join('<br>');
+  box.classList.remove('hidden');
+}
+
+async function submitAjaxForm(form, onSuccess) {
+  const errorBox = form.querySelector('[data-form-errors]');
+  if (errorBox) { errorBox.classList.add('hidden'); errorBox.innerHTML = ''; }
+  const submitBtn = form.querySelector('[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+
+  try {
+    const response = await fetch(form.action, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRFToken': CSRF,
+      },
+      body: new FormData(form),
+      credentials: 'same-origin',
+    });
+    const data = await response.json();
+    if (data.ok) {
+      onSuccess(data, form);
+    } else {
+      showAjaxFormErrors(form, data);
+    }
+  } catch (error) {
+    window.location.reload();
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+document.addEventListener('submit', function (event) {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement)) return;
+  if (event.defaultPrevented) return;
+  const kind = form.dataset.ajaxForm;
+  if (!kind) return;
+  event.preventDefault();
+
+  if (kind === 'task-create') {
+    submitAjaxForm(form, (data) => {
+      document.getElementById('kanban-board').outerHTML = data.board_html;
+      document.getElementById('modal-task-create').classList.add('hidden');
+      form.reset();
+    });
+  } else if (kind === 'task-edit') {
+    submitAjaxForm(form, (data) => {
+      document.getElementById('kanban-board').outerHTML = data.board_html;
+      document.getElementById('modal-task-edit').classList.add('hidden');
+    });
+  } else if (kind === 'task-delete') {
+    submitAjaxForm(form, (data) => {
+      document.getElementById('kanban-board').outerHTML = data.board_html;
+    });
+  } else if (kind === 'member-add') {
+    submitAjaxForm(form, (data) => {
+      document.getElementById('panel-membros').innerHTML = data.panel_html;
+      document.getElementById('modal-member-add').classList.add('hidden');
+      form.reset();
+    });
+  } else if (kind === 'member-remove') {
+    submitAjaxForm(form, (data) => {
+      document.getElementById('panel-membros').innerHTML = data.panel_html;
+    });
+  }
 });
 
 /* ── Drag & Drop ── */

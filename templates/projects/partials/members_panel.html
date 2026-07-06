@@ -1,0 +1,56 @@
+{% if can_manage_project %}
+<div class="mb-5 flex justify-end">
+  <button type="button"
+          onclick="document.getElementById('modal-member-add').classList.remove('hidden')"
+          class="project-new-task-btn inline-flex items-center gap-2 rounded-full bg-[#2F7FD8] px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#1e6cc4]">
+    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    </svg>
+    Adicionar membro
+  </button>
+</div>
+{% endif %}
+
+<!-- Lista de membros -->
+<div>
+  <div class="px-1">
+    <h3 class="mb-4 font-semibold text-slate-900">Membros do projeto</h3>
+    <div class="divide-y divide-slate-100">
+        {% for member in project.members.all %}
+        <div class="flex items-center justify-between px-4 py-3.5">
+          <div class="flex items-center gap-3">
+            <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white
+              {% if member.role == 'MANAGER' %}bg-blue-500{% elif member.role == 'MEMBER' %}bg-indigo-400{% else %}bg-slate-400{% endif %}">
+              {{ member.user.full_name|first|upper }}
+            </div>
+            <div>
+              <p class="text-sm font-medium text-slate-900">{{ member.user.full_name }}</p>
+              <p class="text-xs text-slate-400">{{ member.user.email }}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+              {% if member.role == 'MANAGER' %}bg-blue-100 text-blue-800
+              {% elif member.role == 'MEMBER' %}bg-indigo-100 text-indigo-800
+              {% else %}bg-slate-100 text-slate-600{% endif %}">
+              {{ member.get_role_display }}
+            </span>
+            {% if can_manage_project %}
+            <form method="post" action="{% url 'projects:member_remove' project.pk member.pk %}"
+                  data-ajax-form="member-remove" onsubmit="return confirm('Remover {{ member.user.full_name }} do projeto?')">
+              {% csrf_token %}
+              <button type="submit" class="text-slate-300 transition-colors hover:text-red-500" title="Remover">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        {% empty %}
+        <div class="px-4 py-10 text-center text-sm text-slate-400">Nenhum membro cadastrado</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>

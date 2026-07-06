@@ -11,6 +11,40 @@ from .forms import ProjectForm, ProjectMemberForm, ProjectTaskForm, ProjectUpdat
 from .models import Project, ProjectMember, ProjectTask, ProjectUpdate
 
 
+def _is_ajax(request):
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+
+def _kanban_columns(project):
+    tasks_by_status = {key: [] for key, _ in ProjectTask.STATUS_CHOICES}
+    for task in project.tasks.select_related('assignee').order_by('order', '-created_at'):
+        tasks_by_status[task.status].append(task)
+    return [(key, label, tasks_by_status[key]) for key, label in ProjectTask.STATUS_CHOICES]
+
+
+def _render_kanban_board(request, project):
+    return render_to_string(
+        'projects/partials/kanban_board.html',
+        {
+            'project': project,
+            'kanban_columns': _kanban_columns(project),
+            'can_manage_project': project.can_manage(request.user),
+        },
+        request=request,
+    )
+
+
+def _render_members_panel(request, project):
+    return render_to_string(
+        'projects/partials/members_panel.html',
+        {
+            'project': project,
+            'can_manage_project': project.can_manage(request.user),
+        },
+        request=request,
+    )
+
+
 def _render_updates_panel(request, project, update_form=None):
     return render_to_string(
         'projects/partials/updates_panel.html',
@@ -111,25 +145,10 @@ class ProjectDetailView(TechnicianRequiredMixin, View):
         )
         if not project.can_view(request.user):
             raise PermissionDenied
-        tasks_by_status = {
-            ProjectTask.BACKLOG: [],
-            ProjectTask.TODO: [],
-            ProjectTask.IN_PROGRESS: [],
-            ProjectTask.REVIEW: [],
-            ProjectTask.DONE: [],
-        }
-        for task in project.tasks.select_related('assignee').order_by('order', '-created_at'):
-            tasks_by_status[task.status].append(task)
-
-        # Build ordered columns list for template iteration
-        kanban_columns = [
-            (key, label, tasks_by_status[key])
-            for key, label in ProjectTask.STATUS_CHOICES
-        ]
 
         return render(request, 'projects/project_detail.html', {
             'project': project,
-            'kanban_columns': kanban_columns,
+            'kanban_columns': _kanban_columns(project),
             'task_form': ProjectTaskForm(project=project),
             'member_form': ProjectMemberForm(project=project),
             'update_form': ProjectUpdateForm(),
@@ -173,6 +192,21 @@ class ProjectUpdateView(TechnicianRequiredMixin, View):
         })
 
 
+class ProjectStatusUpdateView(TechnicianRequiredMixin, View):
+    def post(self, request, pk):
+        project = get_object_or_404(Project, pk=pk)
+        if not project.can_manage(request.user):
+            raise PermissionDenied
+        new_status = request.POST.get('status')
+        if new_status in dict(Project.STATUS_CHOICES):
+            project.status = new_status
+            project.save()
+            messages.success(request, f'Status do projeto atualizado para "{project.get_status_display()}".')
+        else:
+            messages.error(request, 'Status inválido.')
+        return redirect('projects:detail', pk=pk)
+
+
 class ProjectDeleteView(SupervisorRequiredMixin, View):
     def post(self, request, pk):
         project = get_object_or_404(Project.objects.prefetch_related('updates__author'), pk=pk)
@@ -193,23 +227,12 @@ class ProjectTaskCreateView(TechnicianRequiredMixin, View):
             task.project = project
             task.created_by = request.user
             task.save()
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({
-                    'id': task.pk,
-                    'title': task.title,
-                    'status': task.status,
-                    'status_display': task.get_status_display(),
-                    'priority': task.priority,
-                    'priority_display': task.get_priority_display(),
-                    'priority_class': task.priority_class(),
-                    'assignee': task.assignee.full_name if task.assignee else None,
-                    'due_date': task.due_date.strftime('%d/%m/%Y') if task.due_date else None,
-                    'is_overdue': task.is_overdue,
-                })
+            if _is_ajax(request):
+                return JsonResponse({'ok': True, 'board_html': _render_kanban_board(request, project)})
             messages.success(request, 'Tarefa criada.')
         else:
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'errors': form.errors}, status=400)
+            if _is_ajax(request):
+                return JsonResponse({'ok': False, 'errors': form.errors}, status=400)
             messages.error(request, 'Erro ao criar tarefa.')
         return redirect('projects:detail', pk=pk)
 
@@ -223,12 +246,12 @@ class ProjectTaskUpdateView(TechnicianRequiredMixin, View):
         form = ProjectTaskForm(request.POST, instance=task, project=project)
         if form.is_valid():
             form.save()
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'ok': True, 'status': task.status})
+            if _is_ajax(request):
+                return JsonResponse({'ok': True, 'board_html': _render_kanban_board(request, project)})
             messages.success(request, 'Tarefa atualizada.')
         else:
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'errors': form.errors}, status=400)
+            if _is_ajax(request):
+                return JsonResponse({'ok': False, 'errors': form.errors}, status=400)
             messages.error(request, 'Erro ao atualizar tarefa.')
         return redirect('projects:detail', pk=pk)
 
@@ -254,8 +277,8 @@ class ProjectTaskDeleteView(TechnicianRequiredMixin, View):
             raise PermissionDenied
         task = get_object_or_404(ProjectTask, pk=task_pk, project=project)
         task.delete()
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'ok': True})
+        if _is_ajax(request):
+            return JsonResponse({'ok': True, 'board_html': _render_kanban_board(request, project)})
         messages.success(request, 'Tarefa removida.')
         return redirect('projects:detail', pk=pk)
 
@@ -271,8 +294,12 @@ class ProjectMemberAddView(TechnicianRequiredMixin, View):
             member.project = project
             member.added_by = request.user
             member.save()
+            if _is_ajax(request):
+                return JsonResponse({'ok': True, 'panel_html': _render_members_panel(request, project)})
             messages.success(request, f'{member.user.full_name} adicionado ao projeto.')
         else:
+            if _is_ajax(request):
+                return JsonResponse({'ok': False, 'errors': form.errors}, status=400)
             messages.error(request, 'Erro ao adicionar membro.')
         return redirect('projects:detail', pk=pk)
 
@@ -284,10 +311,15 @@ class ProjectMemberRemoveView(TechnicianRequiredMixin, View):
             raise PermissionDenied
         member = get_object_or_404(ProjectMember, pk=member_pk, project=project)
         if member.user_id in {project.created_by_id, project.responsible_id}:
-            messages.error(request, 'Nao e permitido remover o criador ou o responsavel do projeto.')
+            error = 'Nao e permitido remover o criador ou o responsavel do projeto.'
+            if _is_ajax(request):
+                return JsonResponse({'ok': False, 'error': error}, status=400)
+            messages.error(request, error)
             return redirect('projects:detail', pk=pk)
         name = member.user.full_name
         member.delete()
+        if _is_ajax(request):
+            return JsonResponse({'ok': True, 'panel_html': _render_members_panel(request, project)})
         messages.success(request, f'{name} removido do projeto.')
         return redirect('projects:detail', pk=pk)
 
@@ -303,7 +335,7 @@ class ProjectUpdateCreateView(TechnicianRequiredMixin, View):
             update.project = project
             update.author = request.user
             update.save()
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            if _is_ajax(request):
                 project = get_object_or_404(Project.objects.prefetch_related('updates__author'), pk=pk)
                 return JsonResponse({
                     'ok': True,
@@ -311,7 +343,7 @@ class ProjectUpdateCreateView(TechnicianRequiredMixin, View):
                 })
             messages.success(request, 'Atualização registrada.')
         else:
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            if _is_ajax(request):
                 return JsonResponse({
                     'ok': False,
                     'panel_html': _render_updates_panel(request, project, form),
@@ -328,7 +360,7 @@ class ProjectUpdateDeleteView(TechnicianRequiredMixin, View):
         update = get_object_or_404(ProjectUpdate, pk=update_pk, project=project)
         if update.author == request.user or request.user.is_supervisor:
             update.delete()
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            if _is_ajax(request):
                 project = get_object_or_404(Project.objects.prefetch_related('updates__author'), pk=pk)
                 return JsonResponse({
                     'ok': True,
@@ -336,7 +368,7 @@ class ProjectUpdateDeleteView(TechnicianRequiredMixin, View):
                 })
             messages.success(request, 'Atualização removida.')
         else:
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            if _is_ajax(request):
                 return JsonResponse({
                     'ok': False,
                     'panel_html': _render_updates_panel(request, project),
