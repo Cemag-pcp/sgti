@@ -67,6 +67,13 @@
               <option value="{{ value }}" {% if filters.priority == value %}selected{% endif %}>{{ label }}</option>
               {% endfor %}
             </select>
+            <select name="area" class="form-input lg:w-40">
+              <option value="">Todas as areas</option>
+              {% for value, label in area_choices %}
+              <option value="{{ value }}" {% if filters.area == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+              <option value="none" {% if filters.area == 'none' %}selected{% endif %}>Sem area</option>
+            </select>
             {% if request.user.is_supervisor %}
             <select name="assigned" class="form-input lg:w-40">
               <option value="">Qualquer fila</option>
@@ -156,6 +163,9 @@
                   {% else %}
                   <span class="text-gray-400 text-xs" data-sla-badge>-</span>
                   {% endif %}
+                  {% if ticket.is_rescheduled %}
+                  <span class="badge bg-purple-100 text-purple-800" data-rescheduled-badge>Reprogramada: {{ ticket.due_date|date:"d/m/Y"|default:"—" }}</span>
+                  {% endif %}
                 </div>
                 <h3 class="mt-2 truncate text-sm font-semibold text-gray-900">{{ ticket.title }}</h3>
                 <p class="mt-3 truncate text-xs text-gray-500">{{ ticket.description }}</p>
@@ -205,7 +215,7 @@
 
               <div class="mt-4 flex gap-2">
                 {% if request.user.is_supervisor or ticket.assigned_to_id == request.user.id %}
-                <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex-1" data-inline-update="status">
+                <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex-1" data-inline-update="status" {% if ticket.area %}data-has-area="true"{% endif %}>
                   {% csrf_token %}
                   <input type="hidden" name="next" value="{{ request.get_full_path }}">
                   <input type="hidden" name="resolved_at" value="{{ ticket.resolved_at|date:'Y-m-d\\TH:i' }}" data-inline-resolved-at>
@@ -264,6 +274,19 @@
       'bg-red-100', 'text-red-800',
       'bg-green-100', 'text-green-800'
     ];
+
+    const toastContainer = document.createElement('div');
+    toastContainer.className = 'fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none';
+    toastContainer.setAttribute('aria-live', 'polite');
+    document.body.appendChild(toastContainer);
+
+    const showError = (message) => {
+      const el = document.createElement('div');
+      el.style.cssText = 'display:flex;align-items:center;gap:10px;min-width:260px;max-width:320px;padding:12px 16px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);font-size:14px;font-weight:500;color:#fff;pointer-events:auto;background:#dc2626;';
+      el.textContent = message;
+      toastContainer.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    };
 
     const replaceBadgeClasses = (element, classesToRemove, classesToAdd) => {
       element.classList.remove(...classesToRemove);
@@ -461,6 +484,12 @@
         const select = form.querySelector('[data-inline-select]');
         const previousValue = select.dataset.previousValue ?? select.value;
 
+        if (form.dataset.inlineUpdate === 'status' && ['RESOLVED', 'CLOSED'].includes(select.value) && !form.dataset.hasArea) {
+          select.value = previousValue;
+          showError('Informe a área do chamado antes de finalizar.');
+          return;
+        }
+
         if (form.dataset.inlineUpdate === 'status' && !form.dataset.skipResolvedModal && select.value === 'RESOLVED') {
           openStatusModal(form);
           return;
@@ -499,6 +528,18 @@
             const resolvedAtInput = form.querySelector('[data-inline-resolved-at]');
             if (resolvedAtInput && payload.resolved_at) {
               resolvedAtInput.value = payload.resolved_at.slice(0, 16);
+            }
+          }
+
+          if (form.dataset.inlineUpdate === 'area') {
+            const card = form.closest('[data-ticket-card]');
+            const statusForm = card?.querySelector('form[data-inline-update="status"]');
+            if (statusForm) {
+              if (payload.area) {
+                statusForm.dataset.hasArea = 'true';
+              } else {
+                delete statusForm.dataset.hasArea;
+              }
             }
           }
         } catch (error) {

@@ -209,6 +209,7 @@ class TicketListView(TechnicianRequiredMixin, ListView):
         status = self.request.GET.get('status')
         priority = self.request.GET.get('priority')
         assigned = self.request.GET.get('assigned')
+        area = self.request.GET.get('area')
         search = self.request.GET.get('q')
 
         if not status and not assigned:
@@ -222,6 +223,10 @@ class TicketListView(TechnicianRequiredMixin, ListView):
             qs = qs.filter(assigned_to=user)
         elif assigned == 'unassigned':
             qs = qs.filter(assigned_to__isnull=True)
+        if area == 'none':
+            qs = qs.filter(area='')
+        elif area:
+            qs = qs.filter(area=area)
         if search:
             qs = qs.filter(Q(title__icontains=search) | Q(description__icontains=search) | Q(ticket_number__icontains=search))
         return qs
@@ -325,6 +330,7 @@ class TicketListView(TechnicianRequiredMixin, ListView):
         }
         ctx['status_choices'] = Ticket.STATUS_CHOICES
         ctx['priority_choices'] = Ticket.PRIORITY_CHOICES
+        ctx['area_choices'] = Ticket.AREA_CHOICES
         ctx['technicians'] = CustomUser.objects.filter(is_active=True)
         ctx['filters'] = self.request.GET
         return ctx
@@ -707,6 +713,20 @@ class TicketStatusView(TechnicianRequiredMixin, View):
         form = TicketStatusForm(request.POST, instance=ticket)
         if form.is_valid():
             updated = form.save(commit=False)
+            if updated.status in (Ticket.RESOLVED, Ticket.CLOSED) and not ticket.area:
+                if is_ajax:
+                    return JsonResponse(
+                        {
+                            'ok': False,
+                            'error': 'area_required',
+                            'status': old_status,
+                            'status_display': ticket.get_status_display(),
+                            'status_class': ticket.status_class(),
+                        },
+                        status=400,
+                    )
+                messages.error(request, 'Informe a area do chamado antes de finalizar.')
+                return redirect('tickets:detail', pk=pk)
             resolved_at_raw = request.POST.get('resolved_at', '').strip()
             if updated.status == Ticket.RESOLVED:
                 if resolved_at_raw:
@@ -993,6 +1013,68 @@ class TicketResolvedAtUpdateView(TechnicianRequiredMixin, View):
                 'resolved_at': ticket.resolved_at.isoformat() if ticket.resolved_at else None,
                 'resolved_at_display': timezone.localtime(ticket.resolved_at).strftime('%d/%m/%Y %H:%M') if ticket.resolved_at else 'Nao definido',
                 'resolved_at_input': timezone.localtime(ticket.resolved_at).strftime('%Y-%m-%dT%H:%M') if ticket.resolved_at else '',
+            }
+        )
+
+
+class TicketDueDateUpdateView(TechnicianRequiredMixin, View):
+    def post(self, request, pk):
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        ticket = get_object_or_404(Ticket, pk=pk)
+        if not ticket.can_edit(request.user):
+            raise PermissionDenied
+
+        due_date_raw = request.POST.get('due_date', '').strip()
+        if not due_date_raw:
+            due_date = None
+        else:
+            due_date = parse_date(due_date_raw)
+            if due_date is None:
+                if not is_ajax:
+                    messages.error(request, 'Data informada para o novo prazo e invalida.')
+                if is_ajax:
+                    return JsonResponse(
+                        {
+                            'ok': False,
+                            'error': 'invalid_due_date',
+                            'due_date': ticket.due_date.isoformat() if ticket.due_date else None,
+                            'due_date_display': ticket.due_date.strftime('%d/%m/%Y') if ticket.due_date else '-',
+                        },
+                        status=400,
+                    )
+                return redirect('tickets:detail', pk=pk)
+
+        old_due_date = ticket.due_date
+        ticket.due_date = due_date
+        if due_date != old_due_date:
+            ticket.is_rescheduled = True
+        ticket.save(update_fields=['due_date', 'is_rescheduled', 'updated_at'])
+
+        if old_due_date != due_date:
+            previous_label = old_due_date.strftime('%d/%m/%Y') if old_due_date else 'Nao definido'
+            current_label = due_date.strftime('%d/%m/%Y') if due_date else 'Nao definido'
+            StatusHistory.objects.create(
+                ticket=ticket,
+                changed_by=request.user,
+                old_status=ticket.status,
+                new_status=ticket.status,
+                old_assigned_to=ticket.assigned_to,
+                new_assigned_to=ticket.assigned_to,
+                comment=f'Ordem reprogramada: prazo alterado de {previous_label} para {current_label}',
+            )
+
+        if not is_ajax:
+            messages.success(request, 'Ordem reprogramada com sucesso.')
+            return redirect('tickets:detail', pk=pk)
+
+        return JsonResponse(
+            {
+                'ok': True,
+                'due_date': ticket.due_date.isoformat() if ticket.due_date else None,
+                'due_date_display': ticket.due_date.strftime('%d/%m/%Y') if ticket.due_date else '-',
+                'is_rescheduled': ticket.is_rescheduled,
+                'sla_flag_label': ticket.sla_flag_label,
+                'sla_flag_class': ticket.sla_flag_class,
             }
         )
 

@@ -24,6 +24,7 @@ urlpatterns = [
     path('<int:pk>/category/', views.TicketCategoryUpdateView.as_view(), name='category'),
     path('<int:pk>/priority/', views.TicketPriorityUpdateView.as_view(), name='priority'),
     path('<int:pk>/resolved-at/', views.TicketResolvedAtUpdateView.as_view(), name='resolved_at'),
+    path('<int:pk>/due-date/', views.TicketDueDateUpdateView.as_view(), name='due_date'),
     path('<int:pk>/hide/', views.TicketHideView.as_view(), name='hide'),
     path('<int:pk>/time-entries/add/', views.TimeEntryCreateView.as_view(), name='time_entry_add'),
     path('<int:pk>/observations/add/', views.ObservationCreateView.as_view(), name='observation_add'),

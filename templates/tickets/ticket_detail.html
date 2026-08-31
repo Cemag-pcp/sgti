@@ -209,7 +209,22 @@
         </div>
         <div>
           <dt class="text-gray-400 text-xs uppercase tracking-wide mb-0.5">Área</dt>
+          {% if can_edit %}
+          <dd>
+            <form method="post" action="{% url 'tickets:area' ticket.pk %}" data-area-form>
+              {% csrf_token %}
+              <select name="area" class="form-input text-sm" data-area-select onchange="this.form.requestSubmit()">
+                <option value="">-</option>
+                {% for value, label in ticket.AREA_CHOICES %}
+                <option value="{{ value }}" {% if ticket.area == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </form>
+            <p class="mt-1 hidden text-xs text-red-600" data-area-error></p>
+          </dd>
+          {% else %}
           <dd class="text-gray-700">{{ ticket.get_area_display|default:"-" }}</dd>
+          {% endif %}
         </div>
         <div>
           <dt class="text-gray-400 text-xs uppercase tracking-wide mb-0.5">Atribuído a</dt>
@@ -217,7 +232,50 @@
         </div>
         <div>
           <dt class="text-gray-400 text-xs uppercase tracking-wide mb-0.5">Prazo</dt>
-          <dd class="text-gray-700">{{ ticket.due_date|date:"d/m/Y"|default:"—" }}</dd>
+          {% if can_edit %}
+          <dd>
+            <div data-due-date-editor>
+              <div class="flex items-center gap-2" data-due-date-view>
+                <span class="text-gray-700" data-due-date-display>{{ ticket.due_date|date:"d/m/Y"|default:"—" }}</span>
+                {% if ticket.is_rescheduled %}
+                <span class="badge bg-purple-100 text-purple-800" data-rescheduled-badge>Reprogramada</span>
+                {% endif %}
+                <button
+                  type="button"
+                  class="text-xs font-medium text-blue-600 hover:text-blue-700"
+                  data-due-date-toggle
+                >
+                  Reprogramar
+                </button>
+              </div>
+              <form
+                method="post"
+                action="{% url 'tickets:due_date' ticket.pk %}"
+                class="mt-2 hidden items-center gap-2"
+                data-due-date-form
+              >
+                {% csrf_token %}
+                <input
+                  type="date"
+                  name="due_date"
+                  value="{{ ticket.due_date|date:'Y-m-d' }}"
+                  class="form-input text-sm"
+                  data-due-date-input
+                >
+                <button type="submit" class="btn-primary whitespace-nowrap">Salvar</button>
+                <button type="button" class="btn-secondary whitespace-nowrap" data-due-date-cancel>Cancelar</button>
+              </form>
+              <p class="mt-1 hidden text-xs text-red-600" data-due-date-error></p>
+            </div>
+          </dd>
+          {% else %}
+          <dd class="text-gray-700">
+            {{ ticket.due_date|date:"d/m/Y"|default:"—" }}
+            {% if ticket.is_rescheduled %}
+            <span class="badge bg-purple-100 text-purple-800">Reprogramada</span>
+            {% endif %}
+          </dd>
+          {% endif %}
         </div>
         <div>
           <dt class="text-gray-400 text-xs uppercase tracking-wide mb-0.5">Aberto em</dt>
@@ -273,7 +331,7 @@
     {% if can_edit %}
     <div class="card">
       <h3 class="font-semibold text-gray-800 mb-3">Mudar status</h3>
-      <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex gap-2" data-status-form>
+      <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex gap-2" data-status-form data-status-area="{{ ticket.area }}">
         {% csrf_token %}
         <input type="hidden" name="resolved_at" value="{{ ticket.resolved_at|date:'Y-m-d\\TH:i' }}" data-status-resolved-at>
         <select name="status" class="form-input flex-1" data-status-select>
@@ -444,14 +502,25 @@
         }
         if (statusSelect) statusSelect.value = payload.status;
         showToast('Status atualizado.');
-      }).catch(function () {
-        showToast('Erro ao atualizar status.', true);
+      }).catch(function (err) {
+        if (statusSelect) statusSelect.value = '{{ ticket.status }}';
+        if (err && err.message === 'area_required') {
+          showToast('Informe a área do chamado antes de finalizar.', true);
+        } else {
+          showToast('Erro ao atualizar status.', true);
+        }
       });
     }
 
     if (statusForm && statusSelect && statusResolvedAt && statusModal && statusModalInput) {
       statusForm.addEventListener('submit', function (event) {
         event.preventDefault();
+        var needsArea = (statusSelect.value === 'RESOLVED' || statusSelect.value === 'CLOSED') && !statusForm.dataset.statusArea;
+        if (needsArea) {
+          statusSelect.value = '{{ ticket.status }}';
+          showToast('Informe a área do chamado antes de finalizar.', true);
+          return;
+        }
         if (statusSelect.value === 'RESOLVED') {
           openStatusModal();
         } else {
@@ -474,6 +543,38 @@
       if (statusModalCancelBtns) {
         statusModalCancelBtns.forEach(function (btn) { btn.addEventListener('click', closeStatusModal); });
       }
+    }
+
+    // ── Área inline editor ───────────────────────────────────────────────────
+    var areaForm = document.querySelector('[data-area-form]');
+    if (areaForm) {
+      var areaSelect = areaForm.querySelector('[data-area-select]');
+      var areaError = areaForm.parentElement.querySelector('[data-area-error]');
+      var areaPrevValue = areaSelect ? areaSelect.value : '';
+
+      areaForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var formData = new FormData(areaForm);
+        if (areaSelect) areaSelect.disabled = true;
+        ajaxPost(areaForm.action, formData).then(function (result) {
+          if (!result.response.ok || !result.payload.ok) throw new Error();
+          areaPrevValue = areaSelect ? areaSelect.value : '';
+          if (statusForm) {
+            if (result.payload.area) {
+              statusForm.dataset.statusArea = result.payload.area;
+            } else {
+              delete statusForm.dataset.statusArea;
+            }
+          }
+          if (areaError) areaError.classList.add('hidden');
+          showToast('Área atualizada.');
+        }).catch(function () {
+          if (areaSelect) areaSelect.value = areaPrevValue;
+          if (areaError) { areaError.textContent = 'Não foi possível salvar.'; areaError.classList.remove('hidden'); }
+        }).finally(function () {
+          if (areaSelect) areaSelect.disabled = false;
+        });
+      });
     }
 
     // ── Observation form ─────────────────────────────────────────────────────
@@ -628,8 +729,9 @@
       if (raForm) {
         raForm.addEventListener('submit', function (event) {
           event.preventDefault();
+          var raFormData = new FormData(raForm);
           if (raInput) raInput.disabled = true;
-          ajaxPost(raForm.action, new FormData(raForm)).then(function (result) {
+          ajaxPost(raForm.action, raFormData).then(function (result) {
             if (!result.response.ok || !result.payload.ok) throw new Error(result.payload.error || 'error');
             raPrevValue = result.payload.resolved_at_input || '';
             raPrevDisplay = result.payload.resolved_at_display || 'Nao definido';
@@ -642,6 +744,66 @@
             if (raError) { raError.textContent = 'Nao foi possivel salvar.'; raError.classList.remove('hidden'); }
           }).finally(function () {
             if (raInput) raInput.disabled = false;
+          });
+        });
+      }
+    }
+
+    // ── Due-date (reprogramar) inline editor ─────────────────────────────────
+    var ddEditor = document.querySelector('[data-due-date-editor]');
+    if (ddEditor) {
+      var ddView = ddEditor.querySelector('[data-due-date-view]');
+      var ddDisplay = ddEditor.querySelector('[data-due-date-display]');
+      var ddToggle = ddEditor.querySelector('[data-due-date-toggle]');
+      var ddForm = ddEditor.querySelector('[data-due-date-form]');
+      var ddInput = ddEditor.querySelector('[data-due-date-input]');
+      var ddCancel = ddEditor.querySelector('[data-due-date-cancel]');
+      var ddError = ddEditor.querySelector('[data-due-date-error]');
+      var ddBadge = ddEditor.querySelector('[data-rescheduled-badge]');
+      var ddPrevValue = ddInput ? ddInput.value : '';
+      var ddPrevDisplay = ddDisplay ? ddDisplay.textContent : '';
+
+      function openDueDateEditor() {
+        if (ddError) ddError.classList.add('hidden');
+        if (ddForm) { ddForm.classList.remove('hidden'); ddForm.classList.add('flex'); }
+        if (ddView) ddView.classList.add('hidden');
+        if (ddInput) ddInput.focus();
+      }
+
+      function closeDueDateEditor() {
+        if (ddForm) { ddForm.classList.add('hidden'); ddForm.classList.remove('flex'); }
+        if (ddView) ddView.classList.remove('hidden');
+        if (ddError) ddError.classList.add('hidden');
+        if (ddInput) ddInput.value = ddPrevValue;
+      }
+
+      if (ddToggle) ddToggle.addEventListener('click', openDueDateEditor);
+      if (ddCancel) ddCancel.addEventListener('click', closeDueDateEditor);
+
+      if (ddForm) {
+        ddForm.addEventListener('submit', function (event) {
+          event.preventDefault();
+          var ddFormData = new FormData(ddForm);
+          if (ddInput) ddInput.disabled = true;
+          ajaxPost(ddForm.action, ddFormData).then(function (result) {
+            if (!result.response.ok || !result.payload.ok) throw new Error(result.payload.error || 'error');
+            ddPrevValue = result.payload.due_date || '';
+            ddPrevDisplay = result.payload.due_date_display || '—';
+            if (ddInput) ddInput.value = ddPrevValue;
+            if (ddDisplay) ddDisplay.textContent = ddPrevDisplay;
+            if (result.payload.is_rescheduled && !ddBadge && ddDisplay) {
+              ddBadge = document.createElement('span');
+              ddBadge.className = 'badge bg-purple-100 text-purple-800';
+              ddBadge.setAttribute('data-rescheduled-badge', '');
+              ddBadge.textContent = 'Reprogramada';
+              ddDisplay.insertAdjacentElement('afterend', ddBadge);
+            }
+            closeDueDateEditor();
+          }).catch(function () {
+            if (ddDisplay) ddDisplay.textContent = ddPrevDisplay;
+            if (ddError) { ddError.textContent = 'Nao foi possivel salvar.'; ddError.classList.remove('hidden'); }
+          }).finally(function () {
+            if (ddInput) ddInput.disabled = false;
           });
         });
       }

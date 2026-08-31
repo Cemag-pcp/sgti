@@ -200,6 +200,7 @@ class Ticket(models.Model):
     )
 
     due_date = models.DateField(null=True, blank=True, verbose_name='Prazo')
+    is_rescheduled = models.BooleanField(default=False, verbose_name='Reprogramada')
     resolved_at = models.DateTimeField(null=True, blank=True, verbose_name='Resolvido em')
     closed_at = models.DateTimeField(null=True, blank=True, verbose_name='Fechado em')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Aberto em')
