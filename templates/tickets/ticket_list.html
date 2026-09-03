@@ -81,17 +81,17 @@
               <option value="me" {% if filters.assigned == 'me' %}selected{% endif %}>Atribuidos a mim</option>
             </select>
             {% endif %}
-            <div class="flex items-center gap-1.5">
+            <div class="flex flex-wrap items-center gap-1.5">
               <label class="text-xs text-gray-500 whitespace-nowrap">Aberto em</label>
-              <input type="date" name="opened_from" value="{{ filters.opened_from|default:'' }}" class="form-input lg:w-36">
+              <input type="date" name="opened_from" value="{{ filters.opened_from|default:'' }}" class="form-input w-full sm:w-36">
               <span class="text-xs text-gray-400">até</span>
-              <input type="date" name="opened_to" value="{{ filters.opened_to|default:'' }}" class="form-input lg:w-36">
+              <input type="date" name="opened_to" value="{{ filters.opened_to|default:'' }}" class="form-input w-full sm:w-36">
             </div>
-            <div class="flex items-center gap-1.5">
+            <div class="flex flex-wrap items-center gap-1.5">
               <label class="text-xs text-gray-500 whitespace-nowrap">Concluído em</label>
-              <input type="date" name="completed_from" value="{{ filters.completed_from|default:'' }}" class="form-input lg:w-36">
+              <input type="date" name="completed_from" value="{{ filters.completed_from|default:'' }}" class="form-input w-full sm:w-36">
               <span class="text-xs text-gray-400">até</span>
-              <input type="date" name="completed_to" value="{{ filters.completed_to|default:'' }}" class="form-input lg:w-36">
+              <input type="date" name="completed_to" value="{{ filters.completed_to|default:'' }}" class="form-input w-full sm:w-36">
             </div>
             <button type="submit" class="btn-primary justify-center">Atualizar</button>
             {% if filters %}
