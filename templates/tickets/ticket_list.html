@@ -53,7 +53,7 @@
             <p class="text-xs font-semibold uppercase tracking-[0.24em] text-gray-400">Painel de tickets</p>
           </div>
 
-          <form method="get" class="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <form method="get" class="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
             {% if filters.q %}<input type="hidden" name="q" value="{{ filters.q }}">{% endif %}
             <select name="status" class="form-input lg:w-40">
               <option value="">Todos os status</option>
@@ -81,6 +81,18 @@
               <option value="me" {% if filters.assigned == 'me' %}selected{% endif %}>Atribuidos a mim</option>
             </select>
             {% endif %}
+            <div class="flex items-center gap-1.5">
+              <label class="text-xs text-gray-500 whitespace-nowrap">Aberto em</label>
+              <input type="date" name="opened_from" value="{{ filters.opened_from|default:'' }}" class="form-input lg:w-36">
+              <span class="text-xs text-gray-400">até</span>
+              <input type="date" name="opened_to" value="{{ filters.opened_to|default:'' }}" class="form-input lg:w-36">
+            </div>
+            <div class="flex items-center gap-1.5">
+              <label class="text-xs text-gray-500 whitespace-nowrap">Concluído em</label>
+              <input type="date" name="completed_from" value="{{ filters.completed_from|default:'' }}" class="form-input lg:w-36">
+              <span class="text-xs text-gray-400">até</span>
+              <input type="date" name="completed_to" value="{{ filters.completed_to|default:'' }}" class="form-input lg:w-36">
+            </div>
             <button type="submit" class="btn-primary justify-center">Atualizar</button>
             {% if filters %}
             <a href="{% url 'tickets:list' %}" class="btn-secondary justify-center">Limpar</a>

@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -229,6 +230,22 @@ class TicketListView(TechnicianRequiredMixin, ListView):
             qs = qs.filter(area=area)
         if search:
             qs = qs.filter(Q(title__icontains=search) | Q(description__icontains=search) | Q(ticket_number__icontains=search))
+
+        opened_from = parse_date(self.request.GET.get('opened_from', ''))
+        opened_to = parse_date(self.request.GET.get('opened_to', ''))
+        completed_from = parse_date(self.request.GET.get('completed_from', ''))
+        completed_to = parse_date(self.request.GET.get('completed_to', ''))
+
+        if opened_from:
+            qs = qs.filter(created_at__date__gte=opened_from)
+        if opened_to:
+            qs = qs.filter(created_at__date__lte=opened_to)
+        if completed_from or completed_to:
+            qs = qs.annotate(completed_at=Coalesce('closed_at', 'resolved_at'))
+            if completed_from:
+                qs = qs.filter(completed_at__date__gte=completed_from)
+            if completed_to:
+                qs = qs.filter(completed_at__date__lte=completed_to)
         return qs
 
     def get_context_data(self, **kwargs):
