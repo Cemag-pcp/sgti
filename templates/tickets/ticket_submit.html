@@ -36,16 +36,36 @@
       </div>
       <div>
         <label class="form-label">Nome completo *</label>
-        <input type="text" name="requester_name" id="id_requester_name"
-          value="{% if known_requester %}{{ known_requester.full_name }}{% else %}{{ form.requester_name.value|default:'' }}{% endif %}"
-          placeholder="Seu nome completo"
-          class="form-input {% if form.requester_name.errors %}border-red-400{% endif %}"
-          required>
+        <div class="relative">
+          <input type="text" name="requester_name" id="id_requester_name"
+            value="{% if known_requester %}{{ known_requester.full_name }}{% else %}{{ form.requester_name.value|default:'' }}{% endif %}"
+            placeholder="Seu nome completo"
+            class="form-input pr-9 {% if form.requester_name.errors %}border-red-400{% endif %}"
+            required>
+          <svg id="requester-name-spinner" class="hidden animate-spin absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+        </div>
         <p id="matricula-hint" class="mt-1 text-xs text-red-600 hidden">Matrícula não encontrada, preencha seu nome.</p>
         {% if form.requester_name.errors %}
         <p class="mt-1 text-xs text-red-600">{{ form.requester_name.errors.0 }}</p>
         {% endif %}
       </div>
+    </div>
+
+    <div>
+      <label class="form-label">Telefone (WhatsApp)</label>
+      <input type="tel" name="whatsapp_phone" id="id_whatsapp_phone"
+        value="{% if known_requester %}{{ known_requester.whatsapp_phone }}{% else %}{{ form.whatsapp_phone.value|default:'' }}{% endif %}"
+        placeholder="Ex: 5511999999999"
+        class="form-input {% if form.whatsapp_phone.errors %}border-red-400{% endif %}">
+      {% if form.whatsapp_phone.errors %}
+      <p class="mt-1 text-xs text-red-600">{{ form.whatsapp_phone.errors.0 }}</p>
+      {% endif %}
+      <p class="mt-1 text-xs text-gray-400">
+        Opcional — usamos para avisar quando seu chamado for concluído. Formato: DDI + DDD + número, ex: 5511999999999. Para deixar de receber avisos, apague o número na próxima vez que abrir um chamado.
+      </p>
     </div>
 
     <div>
@@ -146,16 +166,19 @@
   </form>
 </div>
 
-{% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script>
   // Lookup de matrícula
   const matriculaInput = document.getElementById('id_matricula');
   const nameInput = document.getElementById('id_requester_name');
+  const nameSpinner = document.getElementById('requester-name-spinner');
+  const phoneInput = document.getElementById('id_whatsapp_phone');
   const matriculaHint = document.getElementById('matricula-hint');
 
   function lookupMatricula(matricula) {
     if (!matricula) return;
+    nameInput.disabled = true;
+    nameSpinner.classList.remove('hidden');
     fetch(`{% url 'tickets:requester_lookup' %}?matricula=${encodeURIComponent(matricula)}`)
       .then(r => r.json())
       .then(data => {
@@ -163,11 +186,16 @@
           nameInput.value = data.full_name;
           nameInput.readOnly = true;
           matriculaHint.classList.add('hidden');
+          if (phoneInput) phoneInput.value = data.whatsapp_phone || '';
         } else {
           nameInput.value = '';
           nameInput.readOnly = false;
           matriculaHint.classList.remove('hidden');
         }
+      })
+      .finally(() => {
+        nameInput.disabled = false;
+        nameSpinner.classList.add('hidden');
       });
   }
 
@@ -210,5 +238,4 @@
     });
   }
 </script>
-{% endblock %}
 {% endblock %}

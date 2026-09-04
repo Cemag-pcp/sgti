@@ -13,6 +13,12 @@ class TicketSubmitForm(forms.ModelForm):
         max_length=200,
         widget=forms.TextInput(attrs={'placeholder': 'Seu nome completo'}),
     )
+    whatsapp_phone = forms.CharField(
+        label='Telefone (WhatsApp)',
+        max_length=30,
+        required=False,
+        widget=forms.TextInput(attrs={'placeholder': 'Ex: 5511999999999'}),
+    )
     asset_tag = forms.CharField(
         label='Tombamento',
         max_length=50,
@@ -33,7 +39,7 @@ class TicketSubmitForm(forms.ModelForm):
         self.fields['device'].empty_label = 'Escolha o dispositivo'
         self.fields['device'].required = True
         self.fields['area'].required = False
-        field_order = ['matricula', 'requester_name', 'title', 'description', 'category', 'area', 'priority', 'location', 'device', 'asset_tag']
+        field_order = ['matricula', 'requester_name', 'whatsapp_phone', 'title', 'description', 'category', 'area', 'priority', 'location', 'device', 'asset_tag']
         self.order_fields(field_order)
 
 

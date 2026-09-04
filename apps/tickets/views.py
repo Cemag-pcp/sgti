@@ -29,7 +29,7 @@ from .forms import (
     LocationForm, DeviceForm,
 )
 from .services import create_ticket_from_submission
-from .whatsapp import send_whatsapp_text_message
+from .whatsapp import send_whatsapp_text_message, send_ticket_feedback_template
 from .whatsapp_bot import extract_whatsapp_messages, process_incoming_whatsapp_message
 
 
@@ -44,7 +44,11 @@ class RequesterLookupView(View):
             return JsonResponse({'found': False})
         try:
             requester = RequesterProfile.objects.get(matricula=matricula)
-            return JsonResponse({'found': True, 'full_name': requester.full_name})
+            return JsonResponse({
+                'found': True,
+                'full_name': requester.full_name,
+                'whatsapp_phone': requester.whatsapp_phone,
+            })
         except RequesterProfile.DoesNotExist:
             return JsonResponse({'found': False})
 
@@ -674,12 +678,17 @@ class TicketSubmitView(CreateView):
         return ctx
 
     def form_valid(self, form):
+        whatsapp_phone = form.cleaned_data.get('whatsapp_phone', '').strip()
         ticket = create_ticket_from_submission(
             form,
             created_by=self.request.user if self.request.user.is_authenticated else None,
+            requester_data={'whatsapp_phone': whatsapp_phone},
         )
         if ticket is None:
             return self.form_invalid(form)
+        if not whatsapp_phone and ticket.requester and ticket.requester.whatsapp_phone:
+            ticket.requester.whatsapp_phone = ''
+            ticket.requester.save(update_fields=['whatsapp_phone'])
         messages.success(self.request, f'Chamado {ticket.ticket_number} aberto com sucesso!')
         return redirect('tickets:submit_new')
 
@@ -828,6 +837,13 @@ class TicketStatusView(TechnicianRequiredMixin, View):
                 old_assigned_to=ticket.assigned_to,
                 new_assigned_to=ticket.assigned_to,
             )
+            if old_status != Ticket.RESOLVED and updated.status == Ticket.RESOLVED:
+                requester_phone = updated.requester.whatsapp_phone if updated.requester else ''
+                if requester_phone:
+                    try:
+                        send_ticket_feedback_template(requester_phone, updated)
+                    except Exception:
+                        logger.exception('Falha ao enviar template de feedback via WhatsApp para o ticket %s', updated.ticket_number)
             if not is_ajax:
                 messages.success(request, 'Status atualizado.')
             if is_ajax:
