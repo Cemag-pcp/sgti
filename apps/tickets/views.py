@@ -229,7 +229,14 @@ class TicketListView(TechnicianRequiredMixin, ListView):
         elif area:
             qs = qs.filter(area=area)
         if search:
-            qs = qs.filter(Q(title__icontains=search) | Q(description__icontains=search) | Q(ticket_number__icontains=search))
+            qs = qs.filter(
+                Q(title__icontains=search)
+                | Q(description__icontains=search)
+                | Q(ticket_number__icontains=search)
+                | Q(requester__full_name__icontains=search)
+                | Q(requester__matricula__icontains=search)
+                | Q(assigned_to__full_name__icontains=search)
+            )
 
         opened_from = parse_date(self.request.GET.get('opened_from', ''))
         opened_to = parse_date(self.request.GET.get('opened_to', ''))
