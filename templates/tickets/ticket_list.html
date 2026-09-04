@@ -227,7 +227,7 @@
 
               <div class="mt-4 flex gap-2">
                 {% if request.user.is_supervisor or ticket.assigned_to_id == request.user.id %}
-                <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex-1" data-inline-update="status" {% if ticket.area %}data-has-area="true"{% endif %}>
+                <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex-1" data-inline-update="status" {% if ticket.area %}data-has-area="true"{% endif %} {% if ticket.time_entries.exists %}data-has-time-entry="true"{% endif %}>
                   {% csrf_token %}
                   <input type="hidden" name="next" value="{{ request.get_full_path }}">
                   <input type="hidden" name="resolved_at" value="{{ ticket.resolved_at|date:'Y-m-d\\TH:i' }}" data-inline-resolved-at>
@@ -502,6 +502,12 @@
           return;
         }
 
+        if (form.dataset.inlineUpdate === 'status' && ['RESOLVED', 'CLOSED'].includes(select.value) && !form.dataset.hasTimeEntry) {
+          select.value = previousValue;
+          showError('Registre ao menos um período de tempo antes de finalizar.');
+          return;
+        }
+
         if (form.dataset.inlineUpdate === 'status' && !form.dataset.skipResolvedModal && select.value === 'RESOLVED') {
           openStatusModal(form);
           return;
@@ -556,6 +562,11 @@
           }
         } catch (error) {
           select.value = previousValue;
+          if (error && error.message === 'area_required') {
+            showError('Informe a área do chamado antes de finalizar.');
+          } else if (error && error.message === 'time_entry_required') {
+            showError('Registre ao menos um período de tempo antes de finalizar.');
+          }
         } finally {
           select.disabled = false;
           select.classList.remove('opacity-60');

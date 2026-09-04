@@ -331,7 +331,7 @@
     {% if can_edit %}
     <div class="card">
       <h3 class="font-semibold text-gray-800 mb-3">Mudar status</h3>
-      <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex gap-2" data-status-form data-status-area="{{ ticket.area }}">
+      <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex gap-2" data-status-form data-status-area="{{ ticket.area }}" data-status-has-entries="{% if ticket.time_entries.exists %}1{% endif %}">
         {% csrf_token %}
         <input type="hidden" name="resolved_at" value="{{ ticket.resolved_at|date:'Y-m-d\\TH:i' }}" data-status-resolved-at>
         <select name="status" class="form-input flex-1" data-status-select>
@@ -506,6 +506,8 @@
         if (statusSelect) statusSelect.value = '{{ ticket.status }}';
         if (err && err.message === 'area_required') {
           showToast('Informe a área do chamado antes de finalizar.', true);
+        } else if (err && err.message === 'time_entry_required') {
+          showToast('Registre ao menos um período de tempo antes de finalizar.', true);
         } else {
           showToast('Erro ao atualizar status.', true);
         }
@@ -519,6 +521,12 @@
         if (needsArea) {
           statusSelect.value = '{{ ticket.status }}';
           showToast('Informe a área do chamado antes de finalizar.', true);
+          return;
+        }
+        var needsTimeEntry = (statusSelect.value === 'RESOLVED' || statusSelect.value === 'CLOSED') && !statusForm.dataset.statusHasEntries;
+        if (needsTimeEntry) {
+          statusSelect.value = '{{ ticket.status }}';
+          showToast('Registre ao menos um período de tempo antes de finalizar.', true);
           return;
         }
         if (statusSelect.value === 'RESOLVED') {
@@ -663,6 +671,7 @@
           }
           var totalEl = document.querySelector('[data-total-minutes]');
           if (totalEl) totalEl.textContent = result.payload.total_minutes;
+          if (statusForm) statusForm.dataset.statusHasEntries = '1';
           ['started_at', 'ended_at', 'duration_minutes', 'notes'].forEach(function (name) {
             var inp = timeForm.querySelector('[name="' + name + '"]');
             if (inp) inp.value = '';

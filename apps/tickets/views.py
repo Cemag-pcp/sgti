@@ -197,7 +197,7 @@ class TicketListView(TechnicianRequiredMixin, ListView):
     paginate_by = 20
 
     def _base_queryset(self):
-        qs = Ticket.objects.select_related('requester', 'assigned_to', 'location', 'device').filter(is_hidden=False)
+        qs = Ticket.objects.select_related('requester', 'assigned_to', 'location', 'device').prefetch_related('time_entries').filter(is_hidden=False)
         user = self.request.user
         if user.role == 'TECHNICIAN':
             qs = qs.filter(Q(assigned_to=user) | Q(assigned_to__isnull=True))
@@ -414,19 +414,41 @@ class TicketReportsView(TechnicianRequiredMixin, View):
         total_tickets = len(tickets)
         closure_rate = round((completed_count / total_tickets) * 100, 1) if total_tickets else 0
 
-        def ticket_resolution_hours(ticket):
-            entries = ticket.time_entries.all()
-            total_min = sum(e.duration_minutes for e in entries if e.duration_minutes is not None)
-            if total_min:
-                return round(total_min / 60, 1)
+        def ticket_gross_hours(ticket):
+            """Tempo bruto: horário comercial entre abertura e conclusão, ignorando apontamentos."""
             end = completion_at(ticket)
             return business_hours_between(ticket.created_at, end) if end else None
 
-        resolution_hours = [
+        def ticket_net_hours(ticket):
+            """Tempo líquido: soma dos apontamentos (em horário comercial); sem apontamento, usa o bruto."""
+            entries = ticket.time_entries.all()
+            total_business_hours = 0.0
+            has_entry = False
+            for entry in entries:
+                if not entry.started_at:
+                    continue
+                end = entry.ended_at
+                if end is None and entry.duration_minutes is not None:
+                    end = entry.started_at + timedelta(minutes=entry.duration_minutes)
+                if end is None:
+                    continue
+                has_entry = True
+                total_business_hours += business_hours_between(entry.started_at, end)
+            if has_entry:
+                return round(total_business_hours, 1)
+            return ticket_gross_hours(ticket)
+
+        gross_hours = [
             h for ticket in completed_tickets
-            if (h := ticket_resolution_hours(ticket)) is not None
+            if (h := ticket_gross_hours(ticket)) is not None
         ]
-        avg_resolution_hours = round(sum(resolution_hours) / len(resolution_hours), 1) if resolution_hours else 0
+        avg_gross_hours = round(sum(gross_hours) / len(gross_hours), 1) if gross_hours else 0
+
+        net_hours = [
+            h for ticket in completed_tickets
+            if (h := ticket_net_hours(ticket)) is not None
+        ]
+        avg_net_hours = round(sum(net_hours) / len(net_hours), 1) if net_hours else 0
 
         daily_labels = []
         opened_by_day = {}
@@ -583,16 +605,22 @@ class TicketReportsView(TechnicianRequiredMixin, View):
                     'tone': 'orange',
                 },
                 {
-                    'title': 'Tempo médio de resolução',
-                    'value': f'{avg_resolution_hours}h',
-                    'caption': 'Média do tempo entre abertura e conclusão',
-                    'tone': 'teal',
-                },
-                {
                     'title': 'Taxa de encerramento',
                     'value': f'{closure_rate}%',
                     'caption': f'{completed_count} encerrados de {total_tickets} abertos no período',
                     'tone': 'sky',
+                },
+                {
+                    'title': 'Tempo médio de resolução (bruto)',
+                    'value': f'{avg_gross_hours}h',
+                    'caption': 'Horário comercial entre abertura e conclusão',
+                    'tone': 'teal',
+                },
+                {
+                    'title': 'Tempo médio de resolução (líquido)',
+                    'value': f'{avg_net_hours}h',
+                    'caption': 'Apontamentos em horário comercial; sem apontamento, usa o bruto',
+                    'tone': 'cyan',
                 },
             ],
             'daily_chart': daily_chart,
@@ -743,6 +771,20 @@ class TicketStatusView(TechnicianRequiredMixin, View):
                         status=400,
                     )
                 messages.error(request, 'Informe a area do chamado antes de finalizar.')
+                return redirect('tickets:detail', pk=pk)
+            if updated.status in (Ticket.RESOLVED, Ticket.CLOSED) and not ticket.time_entries.exists():
+                if is_ajax:
+                    return JsonResponse(
+                        {
+                            'ok': False,
+                            'error': 'time_entry_required',
+                            'status': old_status,
+                            'status_display': ticket.get_status_display(),
+                            'status_class': ticket.status_class(),
+                        },
+                        status=400,
+                    )
+                messages.error(request, 'Registre ao menos um periodo de tempo antes de finalizar.')
                 return redirect('tickets:detail', pk=pk)
             resolved_at_raw = request.POST.get('resolved_at', '').strip()
             if updated.status == Ticket.RESOLVED:
