@@ -184,9 +184,35 @@
       <dl class="space-y-3 text-sm">
         <div>
           <dt class="text-gray-400 text-xs uppercase tracking-wide mb-0.5">Solicitante</dt>
+          {% if can_edit %}
+          <dd>
+            <div data-requester-editor>
+              <div class="flex items-center gap-2" data-requester-view>
+                <span class="font-medium text-gray-800" data-requester-display>{{ ticket.requester.full_name|default:"—" }}</span>
+                <button type="button" class="text-xs font-medium text-blue-600 hover:text-blue-700" data-requester-toggle>
+                  {% if ticket.requester %}Alterar{% else %}Informar{% endif %}
+                </button>
+              </div>
+              <p class="text-gray-400 text-xs" data-requester-matricula-display>Matrícula: {{ ticket.requester.matricula|default:"—" }}</p>
+              <form method="post" action="{% url 'tickets:requester' ticket.pk %}" class="mt-2 hidden space-y-2" data-requester-form>
+                {% csrf_token %}
+                <input type="text" name="matricula" placeholder="Matrícula" value="{{ ticket.requester.matricula|default:'' }}"
+                  class="form-input text-sm" data-requester-matricula-input>
+                <input type="text" name="full_name" placeholder="Nome completo" value="{{ ticket.requester.full_name|default:'' }}"
+                  class="form-input text-sm" data-requester-name-input>
+                <div class="flex items-center gap-2">
+                  <button type="submit" class="btn-primary whitespace-nowrap text-sm">Salvar</button>
+                  <button type="button" class="btn-secondary whitespace-nowrap text-sm" data-requester-cancel>Cancelar</button>
+                </div>
+              </form>
+              <p class="mt-1 hidden text-xs text-red-600" data-requester-error></p>
+            </div>
+          </dd>
+          {% else %}
           <dd class="font-medium text-gray-800">{{ ticket.requester.full_name|default:"—" }}</dd>
           {% if ticket.requester.matricula %}
           <dd class="text-gray-400 text-xs">Matrícula: {{ ticket.requester.matricula }}</dd>
+          {% endif %}
           {% endif %}
         </div>
         <div>
@@ -202,9 +228,24 @@
         </div>
         <div>
           <dt class="text-gray-400 text-xs uppercase tracking-wide mb-0.5">Dispositivo</dt>
+          {% if can_edit %}
+          <dd>
+            <form method="post" action="{% url 'tickets:device' ticket.pk %}" data-device-form>
+              {% csrf_token %}
+              <select name="device" class="form-input text-sm" data-device-select onchange="this.form.requestSubmit()">
+                <option value="">-</option>
+                {% for device in devices %}
+                <option value="{{ device.pk }}" {% if ticket.device_id == device.pk %}selected{% endif %}>{{ device.name }}</option>
+                {% endfor %}
+              </select>
+            </form>
+            <p class="mt-1 hidden text-xs text-red-600" data-device-error></p>
+          </dd>
+          {% else %}
           <dd class="text-gray-700">{{ ticket.device.name|default:"—" }}</dd>
           {% if ticket.device.description %}
           <dd class="text-gray-400 text-xs">{{ ticket.device.description }}</dd>
+          {% endif %}
           {% endif %}
         </div>
         <div>
@@ -331,7 +372,7 @@
     {% if can_edit %}
     <div class="card">
       <h3 class="font-semibold text-gray-800 mb-3">Mudar status</h3>
-      <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex gap-2" data-status-form data-status-area="{{ ticket.area }}" data-status-has-entries="{% if ticket.time_entries.exists %}1{% endif %}">
+      <form method="post" action="{% url 'tickets:status' ticket.pk %}" class="flex gap-2" data-status-form data-status-area="{{ ticket.area }}" data-status-has-entries="{% if ticket.time_entries.exists %}1{% endif %}" data-status-has-requester="{% if ticket.requester %}1{% endif %}" data-status-has-device="{% if ticket.device %}1{% endif %}">
         {% csrf_token %}
         <input type="hidden" name="resolved_at" value="{{ ticket.resolved_at|date:'Y-m-d\\TH:i' }}" data-status-resolved-at>
         <select name="status" class="form-input flex-1" data-status-select>
@@ -508,6 +549,10 @@
           showToast('Informe a área do chamado antes de finalizar.', true);
         } else if (err && err.message === 'time_entry_required') {
           showToast('Registre ao menos um período de tempo antes de finalizar.', true);
+        } else if (err && err.message === 'requester_required') {
+          showToast('Informe o solicitante do chamado antes de finalizar.', true);
+        } else if (err && err.message === 'device_required') {
+          showToast('Informe o dispositivo do chamado antes de finalizar.', true);
         } else {
           showToast('Erro ao atualizar status.', true);
         }
@@ -527,6 +572,18 @@
         if (needsTimeEntry) {
           statusSelect.value = '{{ ticket.status }}';
           showToast('Registre ao menos um período de tempo antes de finalizar.', true);
+          return;
+        }
+        var needsRequester = (statusSelect.value === 'RESOLVED' || statusSelect.value === 'CLOSED') && !statusForm.dataset.statusHasRequester;
+        if (needsRequester) {
+          statusSelect.value = '{{ ticket.status }}';
+          showToast('Informe o solicitante do chamado antes de finalizar.', true);
+          return;
+        }
+        var needsDevice = (statusSelect.value === 'RESOLVED' || statusSelect.value === 'CLOSED') && !statusForm.dataset.statusHasDevice;
+        if (needsDevice) {
+          statusSelect.value = '{{ ticket.status }}';
+          showToast('Informe o dispositivo do chamado antes de finalizar.', true);
           return;
         }
         if (statusSelect.value === 'RESOLVED') {
@@ -583,6 +640,96 @@
           if (areaSelect) areaSelect.disabled = false;
         });
       });
+    }
+
+    // ── Dispositivo inline editor ────────────────────────────────────────────
+    var deviceForm = document.querySelector('[data-device-form]');
+    if (deviceForm) {
+      var deviceSelect = deviceForm.querySelector('[data-device-select]');
+      var deviceError = deviceForm.parentElement.querySelector('[data-device-error]');
+      var devicePrevValue = deviceSelect ? deviceSelect.value : '';
+
+      deviceForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var formData = new FormData(deviceForm);
+        if (deviceSelect) deviceSelect.disabled = true;
+        ajaxPost(deviceForm.action, formData).then(function (result) {
+          if (!result.response.ok || !result.payload.ok) throw new Error();
+          devicePrevValue = deviceSelect ? deviceSelect.value : '';
+          if (statusForm) {
+            if (result.payload.device) {
+              statusForm.dataset.statusHasDevice = '1';
+            } else {
+              delete statusForm.dataset.statusHasDevice;
+            }
+          }
+          if (deviceError) deviceError.classList.add('hidden');
+          showToast('Dispositivo atualizado.');
+        }).catch(function () {
+          if (deviceSelect) deviceSelect.value = devicePrevValue;
+          if (deviceError) { deviceError.textContent = 'Não foi possível salvar.'; deviceError.classList.remove('hidden'); }
+        }).finally(function () {
+          if (deviceSelect) deviceSelect.disabled = false;
+        });
+      });
+    }
+
+    // ── Solicitante inline editor ────────────────────────────────────────────
+    var reqEditor = document.querySelector('[data-requester-editor]');
+    if (reqEditor) {
+      var reqDisplay = reqEditor.querySelector('[data-requester-display]');
+      var reqMatriculaDisplay = reqEditor.querySelector('[data-requester-matricula-display]');
+      var reqToggle = reqEditor.querySelector('[data-requester-toggle]');
+      var reqForm = reqEditor.querySelector('[data-requester-form]');
+      var reqMatriculaInput = reqEditor.querySelector('[data-requester-matricula-input]');
+      var reqNameInput = reqEditor.querySelector('[data-requester-name-input]');
+      var reqCancel = reqEditor.querySelector('[data-requester-cancel]');
+      var reqError = reqEditor.querySelector('[data-requester-error]');
+
+      function openRequesterEditor() {
+        if (reqError) reqError.classList.add('hidden');
+        if (reqForm) { reqForm.classList.remove('hidden'); reqForm.classList.add('space-y-2'); }
+        if (reqMatriculaInput) reqMatriculaInput.focus();
+      }
+
+      function closeRequesterEditor() {
+        if (reqForm) reqForm.classList.add('hidden');
+        if (reqError) reqError.classList.add('hidden');
+      }
+
+      if (reqToggle) reqToggle.addEventListener('click', openRequesterEditor);
+      if (reqCancel) reqCancel.addEventListener('click', closeRequesterEditor);
+
+      if (reqMatriculaInput) {
+        reqMatriculaInput.addEventListener('blur', function () {
+          var matricula = this.value.trim();
+          if (!matricula) return;
+          fetch('{% url "tickets:requester_lookup" %}?matricula=' + encodeURIComponent(matricula))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data.found && reqNameInput) reqNameInput.value = data.full_name;
+            })
+            .catch(function () {});
+        });
+      }
+
+      if (reqForm) {
+        reqForm.addEventListener('submit', function (event) {
+          event.preventDefault();
+          var formData = new FormData(reqForm);
+          ajaxPost(reqForm.action, formData).then(function (result) {
+            if (!result.response.ok || !result.payload.ok) throw new Error();
+            if (reqDisplay) reqDisplay.textContent = result.payload.requester_name;
+            if (reqMatriculaDisplay) reqMatriculaDisplay.textContent = 'Matrícula: ' + result.payload.requester_matricula;
+            if (reqToggle) reqToggle.textContent = 'Alterar';
+            if (statusForm) statusForm.dataset.statusHasRequester = '1';
+            closeRequesterEditor();
+            showToast('Solicitante vinculado.');
+          }).catch(function () {
+            if (reqError) { reqError.textContent = 'Informe matrícula e nome válidos.'; reqError.classList.remove('hidden'); }
+          });
+        });
+      }
     }
 
     // ── Observation form ─────────────────────────────────────────────────────

@@ -250,7 +250,7 @@
             </td>
             <td class="table-td align-top">
               {% if request.user.is_supervisor or ticket.assigned_to_id == request.user.id %}
-              <form method="post" action="{% url 'tickets:status' ticket.pk %}" data-inline-update="status" {% if ticket.area %}data-has-area="true"{% endif %} {% if ticket.time_entries.exists %}data-has-time-entry="true"{% endif %}>
+              <form method="post" action="{% url 'tickets:status' ticket.pk %}" data-inline-update="status" {% if ticket.area %}data-has-area="true"{% endif %} {% if ticket.time_entries.exists %}data-has-time-entry="true"{% endif %} {% if ticket.requester %}data-has-requester="true"{% endif %} {% if ticket.device %}data-has-device="true"{% endif %}>
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.get_full_path }}">
                 <input type="hidden" name="resolved_at" value="{{ ticket.resolved_at|date:'Y-m-d\\TH:i' }}" data-inline-resolved-at>
@@ -558,6 +558,18 @@
           return;
         }
 
+        if (form.dataset.inlineUpdate === 'status' && ['RESOLVED', 'CLOSED'].includes(select.value) && !form.dataset.hasRequester) {
+          select.value = previousValue;
+          showError('Informe o solicitante do chamado antes de finalizar.');
+          return;
+        }
+
+        if (form.dataset.inlineUpdate === 'status' && ['RESOLVED', 'CLOSED'].includes(select.value) && !form.dataset.hasDevice) {
+          select.value = previousValue;
+          showError('Informe o dispositivo do chamado antes de finalizar.');
+          return;
+        }
+
         if (form.dataset.inlineUpdate === 'status' && !form.dataset.skipResolvedModal && select.value === 'RESOLVED') {
           openStatusModal(form);
           return;
@@ -617,6 +629,10 @@
             showError('Informe a área do chamado antes de finalizar.');
           } else if (error && error.message === 'time_entry_required') {
             showError('Registre ao menos um período de tempo antes de finalizar.');
+          } else if (error && error.message === 'requester_required') {
+            showError('Informe o solicitante do chamado antes de finalizar.');
+          } else if (error && error.message === 'device_required') {
+            showError('Informe o dispositivo do chamado antes de finalizar.');
           }
         } finally {
           select.disabled = false;

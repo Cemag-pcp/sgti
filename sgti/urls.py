@@ -22,5 +22,6 @@ urlpatterns = [
     path('assets/', include('apps.assets.urls')),
     path('projetos/', include('apps.projects.urls')),
     path('solicitacoes-software/', include('apps.software_requests.urls')),
+    path('monday/', include('apps.monday.urls')),
     path('', RedirectView.as_view(url='/tickets/', permanent=False)),
 ]

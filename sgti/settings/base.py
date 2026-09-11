@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     'apps.assets',
     'apps.projects',
     'apps.software_requests',
+    'apps.monday',
 ]
 
 MIDDLEWARE = [
@@ -110,6 +111,9 @@ WHATSAPP_MESSAGES_URL = config(
         else ''
     ),
 )
+
+MONDAY_API_KEY = config('MONDAY_API_KEY', default='')
+MONDAY_API_URL = config('MONDAY_API_URL', default='https://api.monday.com/v2')
 
 WEBPUSH_VAPID_PUBLIC_KEY = config('WEBPUSH_VAPID_PUBLIC_KEY', default='')
 WEBPUSH_VAPID_PRIVATE_KEY = config('WEBPUSH_VAPID_PRIVATE_KEY', default='')

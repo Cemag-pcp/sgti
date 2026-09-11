@@ -710,6 +710,7 @@ class TicketDetailView(TechnicianRequiredMixin, DetailView):
         ctx['can_edit'] = ticket.can_edit(user)
         ctx['is_supervisor'] = user.is_supervisor
         ctx['technicians'] = CustomUser.objects.filter(is_active=True, role__in=['SUPERVISOR', 'TECHNICIAN'])
+        ctx['devices'] = Device.objects.filter(is_active=True).order_by('name')
         ctx['time_entry_form'] = TimeEntryForm(initial={'technician': user})
         ctx['observation_form'] = ObservationForm()
         ctx['assign_form'] = TicketAssignForm(instance=ticket)
@@ -801,6 +802,34 @@ class TicketStatusView(TechnicianRequiredMixin, View):
                         status=400,
                     )
                 messages.error(request, 'Registre ao menos um periodo de tempo antes de finalizar.')
+                return redirect('tickets:detail', pk=pk)
+            if updated.status in (Ticket.RESOLVED, Ticket.CLOSED) and not ticket.requester_id:
+                if is_ajax:
+                    return JsonResponse(
+                        {
+                            'ok': False,
+                            'error': 'requester_required',
+                            'status': old_status,
+                            'status_display': ticket.get_status_display(),
+                            'status_class': ticket.status_class(),
+                        },
+                        status=400,
+                    )
+                messages.error(request, 'Informe o solicitante do chamado antes de finalizar.')
+                return redirect('tickets:detail', pk=pk)
+            if updated.status in (Ticket.RESOLVED, Ticket.CLOSED) and not ticket.device_id:
+                if is_ajax:
+                    return JsonResponse(
+                        {
+                            'ok': False,
+                            'error': 'device_required',
+                            'status': old_status,
+                            'status_display': ticket.get_status_display(),
+                            'status_class': ticket.status_class(),
+                        },
+                        status=400,
+                    )
+                messages.error(request, 'Informe o dispositivo do chamado antes de finalizar.')
                 return redirect('tickets:detail', pk=pk)
             resolved_at_raw = request.POST.get('resolved_at', '').strip()
             if updated.status == Ticket.RESOLVED:
@@ -924,6 +953,108 @@ class TicketAreaUpdateView(TechnicianRequiredMixin, View):
         ):
             return redirect(next_url)
         return redirect('tickets:list')
+
+
+class TicketDeviceUpdateView(TechnicianRequiredMixin, View):
+    def post(self, request, pk):
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        ticket = get_object_or_404(Ticket, pk=pk)
+        if not ticket.can_edit(request.user):
+            raise PermissionDenied
+
+        device_id = request.POST.get('device', '').strip()
+        device = Device.objects.filter(pk=device_id, is_active=True).first() if device_id else None
+
+        if device_id and device is None:
+            if not is_ajax:
+                messages.error(request, 'Dispositivo informado e invalido.')
+            if is_ajax:
+                return JsonResponse(
+                    {
+                        'ok': False,
+                        'error': 'invalid_device',
+                        'device': ticket.device_id,
+                        'device_display': ticket.device.name if ticket.device else '-',
+                    },
+                    status=400,
+                )
+        else:
+            ticket.device = device
+            ticket.save(update_fields=['device', 'updated_at'])
+            if not is_ajax:
+                messages.success(request, 'Dispositivo atualizado.')
+            if is_ajax:
+                return JsonResponse(
+                    {
+                        'ok': True,
+                        'device': ticket.device_id,
+                        'device_display': ticket.device.name if ticket.device else '-',
+                    }
+                )
+
+        next_url = request.POST.get('next', '').strip()
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return redirect(next_url)
+        return redirect('tickets:list')
+
+
+class TicketRequesterUpdateView(TechnicianRequiredMixin, View):
+    def post(self, request, pk):
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        ticket = get_object_or_404(Ticket, pk=pk)
+        if not ticket.can_edit(request.user):
+            raise PermissionDenied
+
+        matricula = request.POST.get('matricula', '').strip()
+        full_name = request.POST.get('full_name', '').strip()
+
+        if not matricula or not full_name:
+            if not is_ajax:
+                messages.error(request, 'Informe a matricula e o nome do solicitante.')
+            if is_ajax:
+                return JsonResponse(
+                    {
+                        'ok': False,
+                        'error': 'invalid_requester',
+                        'requester_name': ticket.requester.full_name if ticket.requester else '',
+                        'requester_matricula': ticket.requester.matricula if ticket.requester else '',
+                    },
+                    status=400,
+                )
+        else:
+            requester, created = RequesterProfile.objects.get_or_create(
+                matricula=matricula,
+                defaults={'full_name': full_name},
+            )
+            if not created and requester.full_name != full_name:
+                requester.full_name = full_name
+                requester.save(update_fields=['full_name'])
+
+            ticket.requester = requester
+            ticket.save(update_fields=['requester', 'updated_at'])
+            if not is_ajax:
+                messages.success(request, 'Solicitante vinculado ao chamado.')
+            if is_ajax:
+                return JsonResponse(
+                    {
+                        'ok': True,
+                        'requester_name': requester.full_name,
+                        'requester_matricula': requester.matricula,
+                    }
+                )
+
+        next_url = request.POST.get('next', '').strip()
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return redirect(next_url)
+        return redirect('tickets:detail', pk=pk)
 
 
 class TicketCategoryUpdateView(TechnicianRequiredMixin, View):
