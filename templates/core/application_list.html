@@ -74,6 +74,9 @@
             <span class="badge {% if app.app_type == 'INTERNAL' %}bg-sky-100 text-sky-800{% else %}bg-violet-100 text-violet-800{% endif %}">
               {{ app.get_app_type_display }}
             </span>
+            {% if app.app_type == 'EXTERNAL' and app.billing_type %}
+            <span class="badge bg-amber-100 text-amber-800">{{ app.get_billing_type_display }}</span>
+            {% endif %}
           </td>
           <td class="table-td text-gray-600">{{ app.responsible|default:"-" }}</td>
           <td class="table-td text-gray-600">{{ app.release_date|date:"d/m/Y"|default:"-" }}</td>
@@ -91,6 +94,7 @@
                 pk: {{ app.pk }},
                 name: '{{ app.name|escapejs }}',
                 app_type: '{{ app.app_type }}',
+                billing_type: '{{ app.billing_type }}',
                 responsible: '{{ app.responsible|escapejs }}',
                 url: '{{ app.url|escapejs }}',
                 release_date: '{{ app.release_date|date:"Y-m-d"|default:"" }}',
@@ -151,9 +155,21 @@
 
         <div>
           <label class="form-label">Tipo *</label>
-          <select name="app_type" id="field-app_type" class="form-input">
+          <select name="app_type" id="field-app_type" class="form-input" onchange="toggleBillingType()">
             {% for value, label in application_form.fields.app_type.choices %}
             <option value="{{ value }}" {% if application_form.app_type.value == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div id="field-billing_type-wrap">
+          <label class="form-label">Contrato ou assinatura</label>
+          <select name="billing_type" id="field-billing_type" class="form-input">
+            <option value="">-</option>
+            {% for value, label in application_form.fields.billing_type.choices %}
+            {% if value %}
+            <option value="{{ value }}" {% if application_form.billing_type.value == value %}selected{% endif %}>{{ label }}</option>
+            {% endif %}
             {% endfor %}
           </select>
         </div>
@@ -242,6 +258,14 @@
 <script>
   const createUrl = "{% url 'core:application_create' %}";
 
+  function toggleBillingType() {
+    const appType = document.getElementById('field-app_type').value;
+    const wrap = document.getElementById('field-billing_type-wrap');
+    const isExternal = appType === 'EXTERNAL';
+    wrap.classList.toggle('hidden', !isExternal);
+    if (!isExternal) document.getElementById('field-billing_type').value = '';
+  }
+
   function openModal(data) {
     const form = document.getElementById('application-form');
     const title = document.getElementById('modal-title');
@@ -251,6 +275,7 @@
       form.action = `/applications/${data.pk}/edit/`;
       document.getElementById('field-name').value = data.name;
       document.getElementById('field-app_type').value = data.app_type;
+      document.getElementById('field-billing_type').value = data.billing_type || '';
       document.getElementById('field-responsible').value = data.responsible;
       document.getElementById('field-url').value = data.url;
       document.getElementById('field-release_date').value = data.release_date;
@@ -264,6 +289,7 @@
       document.getElementById('field-is_active').checked = true;
     }
 
+    toggleBillingType();
     document.getElementById('application-modal').classList.remove('hidden');
   }
 
@@ -282,7 +308,7 @@
   }
 
   {% if open_modal %}
-  document.addEventListener('DOMContentLoaded', () => openModal({% if edit_pk %}{ pk: {{ edit_pk }}, name: '', app_type: 'INTERNAL', responsible: '', url: '', release_date: '', description: '', notes: '', is_active: true }{% else %}null{% endif %}));
+  document.addEventListener('DOMContentLoaded', () => openModal({% if edit_pk %}{ pk: {{ edit_pk }}, name: '', app_type: 'INTERNAL', billing_type: '', responsible: '', url: '', release_date: '', description: '', notes: '', is_active: true }{% else %}null{% endif %}));
   {% endif %}
 </script>
 {% endblock %}

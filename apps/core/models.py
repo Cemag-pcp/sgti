@@ -9,8 +9,18 @@ class Application(models.Model):
         (EXTERNAL, 'Externo'),
     ]
 
+    CONTRACT = 'CONTRACT'
+    SUBSCRIPTION = 'SUBSCRIPTION'
+    BILLING_TYPE_CHOICES = [
+        (CONTRACT, 'Contrato'),
+        (SUBSCRIPTION, 'Assinatura'),
+    ]
+
     name = models.CharField(max_length=120, unique=True, verbose_name='Nome')
     app_type = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name='Tipo')
+    billing_type = models.CharField(
+        max_length=20, choices=BILLING_TYPE_CHOICES, blank=True, verbose_name='Contrato ou assinatura'
+    )
     responsible = models.CharField(max_length=120, blank=True, verbose_name='Responsável')
     url = models.URLField(blank=True, verbose_name='URL')
     release_date = models.DateField(null=True, blank=True, verbose_name='Data de lançamento')
